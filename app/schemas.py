@@ -100,7 +100,7 @@ class DeviceBase(BaseModel):
     description: str | None = None
     tags: list[str] = Field(default_factory=list)
     enabled: bool = True
-    interval_seconds: int = Field(default=60, ge=5, le=86400)
+    interval_seconds: int = Field(default=20, ge=5, le=86400)
     timeout_seconds: float = Field(default=3.0, gt=0, le=60)
     latency_threshold_ms: float | None = Field(default=None, ge=0)
     notify: bool = True
