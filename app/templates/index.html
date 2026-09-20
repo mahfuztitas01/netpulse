@@ -187,8 +187,24 @@
       <input id="tg-token" type="password" autocomplete="off" placeholder="123456:ABC-DEF..." />
       <div class="muted" style="font-size:12px;margin-top:4px" id="tg-token-hint"></div>
 
-      <label>Chat ID</label>
-      <input id="tg-chat" placeholder="123456789" />
+      <label>Chat ID <span class="muted">(personal, or a group — group ids start with <code>-100</code>)</span></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="tg-chat" placeholder="-1001234567890" />
+        <button type="button" class="ghost" id="tg-find" style="white-space:nowrap">Find chat ID</button>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:6px" id="tg-chats"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:18px 0" />
+
+      <h4 style="margin:0 0 6px">Group status digest</h4>
+      <label class="checkbox"><input type="checkbox" id="tg-digest" /> Post a status summary periodically</label>
+      <div class="grid-2">
+        <div><label>Every (minutes)</label><input id="tg-digest-min" type="number" value="60" min="5" /></div>
+        <div></div>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:4px">
+        Sends "🟢/🔴 NetPulse Status — total / up / down / avg latency" to the chat above.
+      </div>
 
       <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.6">
         <b>How to get these:</b><br>

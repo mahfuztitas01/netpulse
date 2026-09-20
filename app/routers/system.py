@@ -4,7 +4,7 @@ from __future__ import annotations
 import platform
 import sys
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from .. import __version__
 from ..config import settings
@@ -101,6 +101,8 @@ async def telegram_settings(_: User = Depends(get_current_user_ready)):
         chat_id=cfg.chat_id or None,
         has_token=bool(cfg.token),
         ready=cfg.ready,
+        digest_enabled=cfg.digest_enabled,
+        digest_minutes=cfg.digest_minutes,
     )
 
 
@@ -113,6 +115,8 @@ async def update_telegram_settings(
         enabled=payload.enabled,
         token=payload.bot_token,
         chat_id=payload.chat_id,
+        digest_enabled=payload.digest_enabled,
+        digest_minutes=payload.digest_minutes,
     )
     cfg = await load_telegram_config()
     return TelegramSettingsOut(
@@ -120,6 +124,8 @@ async def update_telegram_settings(
         chat_id=cfg.chat_id or None,
         has_token=bool(cfg.token),
         ready=cfg.ready,
+        digest_enabled=cfg.digest_enabled,
+        digest_minutes=cfg.digest_minutes,
     )
 
 
@@ -127,6 +133,52 @@ async def update_telegram_settings(
 async def test_telegram(_: User = Depends(get_current_user_ready)):
     ok, msg = await notifier.test()
     return MessageOut(detail=msg)
+
+
+@router.get("/telegram/chats")
+async def telegram_chats(_: User = Depends(get_current_user_ready)):
+    """List chats the bot has recently seen (so you can copy a GROUP chat id)."""
+    cfg = await load_telegram_config()
+    if not cfg.token:
+        raise HTTPException(status_code=400, detail="Save the bot token first")
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"https://api.telegram.org/bot{cfg.token}/getUpdates")
+        data = r.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Telegram request failed: {exc}")
+
+    if not data.get("ok"):
+        raise HTTPException(status_code=400, detail=data.get("description", "Telegram error"))
+
+    chats: dict[int, dict] = {}
+    for upd in data.get("result", []):
+        msg = (
+            upd.get("message")
+            or upd.get("edited_message")
+            or upd.get("channel_post")
+            or upd.get("my_chat_member")
+            or upd.get("chat_member")
+            or {}
+        )
+        chat = msg.get("chat") or {}
+        cid = chat.get("id")
+        if cid is None:
+            continue
+        chats[cid] = {
+            "id": cid,
+            "type": chat.get("type"),
+            "title": chat.get("title") or chat.get("username") or chat.get("first_name") or "",
+        }
+    return {
+        "chats": list(chats.values()),
+        "hint": (
+            "Group id starts with -100 (e.g. -1001234567890). "
+            "Add the bot to your group, send a message there, then refresh this list."
+        ),
+    }
 
 
 @router.get("/whatsapp", response_model=WhatsAppSettingsOut)

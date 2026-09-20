@@ -270,6 +270,8 @@ class TelegramSettingsIn(BaseModel):
     enabled: bool | None = None
     bot_token: str | None = None      # write-only; stored encrypted
     chat_id: str | None = None
+    digest_enabled: bool | None = None
+    digest_minutes: int | None = None
 
 
 class TelegramSettingsOut(BaseModel):
@@ -277,6 +279,8 @@ class TelegramSettingsOut(BaseModel):
     chat_id: str | None = None
     has_token: bool
     ready: bool
+    digest_enabled: bool = False
+    digest_minutes: int = 60
 
 
 class WhatsAppSettingsIn(BaseModel):

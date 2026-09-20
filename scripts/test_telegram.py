@@ -99,6 +99,18 @@ with TestClient(app) as c:
     r = c.post("/api/system/whatsapp/test")
     check("wa test 200", r.status_code == 200, str(r.status_code))
 
+    print("== digest + chat discovery ==")
+    s = c.get("/api/system/telegram").json()
+    check("digest defaults off", s.get("digest_enabled") is False, str(s))
+    r = c.put("/api/system/telegram", json={"digest_enabled": True, "digest_minutes": 30})
+    check("digest PUT 200", r.status_code == 200, r.text[:100])
+    s = r.json()
+    check("digest enabled", s.get("digest_enabled") is True, str(s))
+    check("digest minutes = 30", s.get("digest_minutes") == 30, str(s))
+    check("digest minutes clamped (min 5)", c.put("/api/system/telegram", json={"digest_minutes": 1}).json().get("digest_minutes") == 5)
+    r = c.get("/api/system/telegram/chats")
+    check("chats endpoint reachable", r.status_code in (200, 400), f"{r.status_code} {r.text[:80]}")
+
 print("\n" + "=" * 50)
 if FAILS:
     print(f"TELEGRAM TEST FAILED ({len(FAILS)}): {FAILS}")

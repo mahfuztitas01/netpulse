@@ -23,6 +23,8 @@ _API_BASE = "https://api.telegram.org"
 KEY_ENABLED = "telegram_enabled"
 KEY_TOKEN = "telegram_bot_token"
 KEY_CHAT = "telegram_chat_id"
+KEY_DIGEST = "telegram_digest_enabled"
+KEY_DIGEST_MIN = "telegram_digest_minutes"
 
 
 @dataclass(slots=True)
@@ -30,6 +32,8 @@ class TelegramConfig:
     enabled: bool = False
     token: str = ""
     chat_id: str = ""
+    digest_enabled: bool = False
+    digest_minutes: int = 60
 
     @property
     def ready(self) -> bool:
@@ -50,7 +54,9 @@ async def load_telegram_config() -> TelegramConfig:
 
         async with SessionLocal() as db:
             rows = await db.execute(
-                select(AppSetting).where(AppSetting.key.in_([KEY_ENABLED, KEY_TOKEN, KEY_CHAT]))
+                select(AppSetting).where(
+                    AppSetting.key.in_([KEY_ENABLED, KEY_TOKEN, KEY_CHAT, KEY_DIGEST, KEY_DIGEST_MIN])
+                )
             )
             kv = {r.key: (r.value or "") for r in rows.scalars().all()}
 
@@ -60,13 +66,25 @@ async def load_telegram_config() -> TelegramConfig:
             cfg.token = decrypt(kv[KEY_TOKEN]) or ""
         if KEY_CHAT in kv:
             cfg.chat_id = kv[KEY_CHAT]
+        if KEY_DIGEST in kv:
+            cfg.digest_enabled = kv[KEY_DIGEST].lower() == "true"
+        if kv.get(KEY_DIGEST_MIN):
+            try:
+                cfg.digest_minutes = max(5, int(kv[KEY_DIGEST_MIN]))
+            except ValueError:
+                pass
     except Exception as exc:  # noqa: BLE001 - never break notifications
         log.debug("could not load telegram config from db: %s", exc)
     return cfg
 
 
 async def save_telegram_config(
-    *, enabled: bool | None = None, token: str | None = None, chat_id: str | None = None
+    *,
+    enabled: bool | None = None,
+    token: str | None = None,
+    chat_id: str | None = None,
+    digest_enabled: bool | None = None,
+    digest_minutes: int | None = None,
 ) -> None:
     """Persist telegram settings (token is encrypted at rest)."""
     from ..database import SessionLocal
@@ -87,6 +105,10 @@ async def save_telegram_config(
             await upsert(KEY_TOKEN, encrypt(token))
         if chat_id is not None:
             await upsert(KEY_CHAT, chat_id)
+        if digest_enabled is not None:
+            await upsert(KEY_DIGEST, "true" if digest_enabled else "false")
+        if digest_minutes is not None:
+            await upsert(KEY_DIGEST_MIN, str(max(5, digest_minutes)))
         await db.commit()
 
 
@@ -163,6 +185,32 @@ class TelegramNotifier:
             f"<b>Host:</b> <code>{_esc(host)}</code>\n"
             f"<b>Value:</b> {_esc(value)} (threshold {_esc(threshold)})"
         )
+
+    async def status_digest(
+        self,
+        *,
+        total: int,
+        up: int,
+        down: int,
+        unknown: int,
+        avg_latency_ms: float | None,
+        down_devices: list[str],
+    ) -> bool:
+        icon = "🟢" if down == 0 else "🔴"
+        lines = [
+            f"{icon} <b>NetPulse Status</b>",
+            f"Total: <b>{total}</b>   Up: <b>{up}</b>   Down: <b>{down}</b>   Unknown: {unknown}",
+        ]
+        if avg_latency_ms is not None:
+            lines.append(f"Avg latency: {avg_latency_ms:.1f} ms")
+        if down_devices:
+            lines.append("")
+            lines.append("<b>DOWN now:</b>")
+            for name in down_devices[:15]:
+                lines.append(f"• {_esc(name)}")
+            if len(down_devices) > 15:
+                lines.append(f"… and {len(down_devices) - 15} more")
+        return await self.send("\n".join(lines))
 
     async def test(self) -> tuple[bool, str]:
         cfg = await load_telegram_config()

@@ -328,6 +328,8 @@ async function loadTelegram() {
   document.getElementById("tg-enabled").checked = s.enabled;
   document.getElementById("tg-chat").value = s.chat_id || "";
   document.getElementById("tg-token").value = "";
+  document.getElementById("tg-digest").checked = !!s.digest_enabled;
+  document.getElementById("tg-digest-min").value = s.digest_minutes || 60;
   document.getElementById("tg-token-hint").textContent =
     s.has_token ? "✅ a token is already saved (leave blank to keep it)"
                 : "⚠️ no token saved yet";
@@ -348,6 +350,8 @@ async function saveTelegram() {
   const tgBody = {
     enabled: document.getElementById("tg-enabled").checked,
     chat_id: document.getElementById("tg-chat").value.trim(),
+    digest_enabled: document.getElementById("tg-digest").checked,
+    digest_minutes: Number(document.getElementById("tg-digest-min").value || 60),
   };
   const tgToken = document.getElementById("tg-token").value.trim();
   if (tgToken) tgBody.bot_token = tgToken;
@@ -391,6 +395,26 @@ async function testWhatsAppSettings() {
     errBox.style.color = "var(--up)";
     errBox.textContent = "WhatsApp: " + r.detail;
   } catch (e) { errBox.style.color = "var(--down)"; errBox.textContent = e.message; }
+}
+
+async function findTelegramChats() {
+  const box = document.getElementById("tg-chats");
+  box.textContent = "Looking up chats...";
+  try {
+    const r = await api("/api/system/telegram/chats");
+    const chats = r.chats || [];
+    if (!chats.length) {
+      box.innerHTML = "No chats found. Add the bot to your group, send a message there, then click again.";
+      return;
+    }
+    box.innerHTML = chats.map((c) =>
+      `<a href="#" onclick="pickChat('${c.id}');return false;">${esc(c.title || c.type || "chat")} (${c.id})</a>`
+    ).join("<br>") + `<div class="muted" style="margin-top:6px">${esc(r.hint || "")}</div>`;
+  } catch (e) { box.style.color = "var(--down)"; box.textContent = e.message; }
+}
+
+function pickChat(id) {
+  document.getElementById("tg-chat").value = id;
 }
 
 /* ---------------------------------------------------------------- users */
@@ -514,6 +538,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("tg-save").addEventListener("click", saveTelegram);
   document.getElementById("tg-test").addEventListener("click", testTelegramSettings);
   document.getElementById("wa-test").addEventListener("click", testWhatsAppSettings);
+  document.getElementById("tg-find").addEventListener("click", findTelegramChats);
   document.getElementById("btn-logout").addEventListener("click", logout);
   document.getElementById("btn-refresh").addEventListener("click", refresh);
   document.getElementById("drawer-close").addEventListener("click", closeDrawer);

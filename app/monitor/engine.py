@@ -25,7 +25,7 @@ from ..models import (
 )
 from .checks import run_check
 from .metrics import collect_device_metrics
-from .notifier import notifier
+from .notifier import load_telegram_config, notifier
 
 log = logging.getLogger("netpulse.engine")
 
@@ -61,6 +61,7 @@ class MonitorEngine:
         self._stopping = asyncio.Event()
         self._sem = asyncio.Semaphore(settings.max_concurrency)
         self._last_cleanup: datetime | None = None
+        self._last_digest: datetime | None = None
 
     # ------------------------------------------------------------------ life
     async def start(self) -> None:
@@ -114,6 +115,7 @@ class MonitorEngine:
         if due_ids:
             await asyncio.gather(*(self._process_device(did) for did in due_ids))
 
+        await self._maybe_digest(now)
         await self._maybe_cleanup(now)
 
     # ------------------------------------------------------------ per-device
@@ -307,6 +309,37 @@ class MonitorEngine:
             return True
         created = _as_utc(event.created_at)
         return created is None or (now - created) >= timedelta(minutes=minutes)
+
+    # ------------------------------------------------------------- digest
+    async def _maybe_digest(self, now: datetime) -> None:
+        """Periodically post an overall status summary to Telegram/WhatsApp."""
+        try:
+            cfg = await load_telegram_config()
+        except Exception:
+            return
+        if not (cfg.ready and cfg.digest_enabled):
+            return
+        last = self._last_digest
+        if last is not None and (now - last) < timedelta(minutes=cfg.digest_minutes):
+            return
+        self._last_digest = now
+
+        async with SessionLocal() as db:
+            devices = (await db.execute(select(Device))).scalars().all()
+
+        total = len(devices)
+        up = sum(1 for d in devices if d.status == DeviceStatus.up)
+        down = sum(1 for d in devices if d.status == DeviceStatus.down)
+        unknown = total - up - down
+        lats = [d.last_latency_ms for d in devices if d.last_latency_ms is not None]
+        avg = (sum(lats) / len(lats)) if lats else None
+        down_names = [d.name for d in devices if d.status == DeviceStatus.down]
+
+        ok = await notifier.status_digest(
+            total=total, up=up, down=down, unknown=unknown,
+            avg_latency_ms=avg, down_devices=down_names,
+        )
+        log.info("status digest sent=%s (up=%s down=%s)", ok, up, down)
 
     # ----------------------------------------------------------- retention
     async def _maybe_cleanup(self, now: datetime) -> None:
