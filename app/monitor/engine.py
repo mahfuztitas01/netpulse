@@ -212,22 +212,24 @@ class MonitorEngine:
         if current == DeviceStatus.down and previous != DeviceStatus.down:
             device.last_down_at = now
             device.last_change_at = now
-            db.add(Event(device_id=device.id, type=EventType.down, severity=EventSeverity.critical,
-                         message=f"Device DOWN - {errors}", notified=False))
+            event = Event(device_id=device.id, type=EventType.down, severity=EventSeverity.critical,
+                          message=f"Device DOWN - {errors}", notified=False)
+            db.add(event)
             if device.notify and not first_state:
                 ok = await notifier.device_down(device.name, device.host, errors)
-                await self._mark_latest_notified(db, device.id, EventType.down, ok)
+                event.notified = bool(ok)
             log.warning("Device %s (%s) DOWN: %s", device.name, device.host, errors)
 
         elif current == DeviceStatus.up and previous == DeviceStatus.down:
             device.last_change_at = now
             down_at = _as_utc(device.last_down_at)
             downtime = _humanize(now - down_at) if down_at else "unknown"
-            db.add(Event(device_id=device.id, type=EventType.up, severity=EventSeverity.info,
-                         message=f"Device UP (downtime {downtime})", notified=False))
+            event = Event(device_id=device.id, type=EventType.up, severity=EventSeverity.info,
+                          message=f"Device UP (downtime {downtime})", notified=False)
+            db.add(event)
             if device.notify:
                 ok = await notifier.device_up(device.name, device.host, downtime)
-                await self._mark_latest_notified(db, device.id, EventType.up, ok)
+                event.notified = bool(ok)
             await self._resolve_open_events(db, device.id, now)
             log.info("Device %s (%s) UP (downtime %s)", device.name, device.host, downtime)
 
@@ -279,16 +281,6 @@ class MonitorEngine:
                                                 f"{device.last_ram:.0f}%", f"{ram_threshold:.0f}%")
 
     # ------------------------------------------------------- alert helpers
-    @staticmethod
-    async def _mark_latest_notified(db, device_id: int, etype: EventType, ok: bool) -> None:
-        result = await db.execute(
-            select(Event).where(Event.device_id == device_id, Event.type == etype)
-            .order_by(Event.created_at.desc()).limit(1)
-        )
-        event = result.scalar_one_or_none()
-        if event is not None:
-            event.notified = ok
-
     @staticmethod
     async def _resolve_open_events(db, device_id: int, now: datetime) -> None:
         result = await db.execute(
