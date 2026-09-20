@@ -61,6 +61,30 @@ class SnmpVersion(str, enum.Enum):
     v3 = "3"
 
 
+# ---------------------------------------------------------------- alert group
+class AlertGroup(Base):
+    """A notification destination (e.g. one per client).
+
+    Devices can be assigned to a group so that a device's alerts only reach
+    that group's chat — client1's devices never message client2.
+    """
+
+    __tablename__ = "alert_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    whatsapp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    devices: Mapped[list["Device"]] = relationship(back_populates="alert_group")
+
+
 # ---------------------------------------------------------------- user
 class User(Base):
     __tablename__ = "users"
@@ -96,6 +120,11 @@ class Device(Base):
     timeout_seconds: Mapped[float] = mapped_column(Float, default=3.0)
     latency_threshold_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     notify: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Which alert group receives this device's notifications (NULL = default chat)
+    alert_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("alert_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # --- SNMP (secrets stored encrypted, see app.crypto) ---
     snmp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -147,10 +176,17 @@ class Device(Base):
     events: Mapped[list["Event"]] = relationship(
         back_populates="device", cascade="all, delete-orphan"
     )
+    alert_group: Mapped["AlertGroup | None"] = relationship(
+        back_populates="devices", lazy="selectin"
+    )
 
     @property
     def has_snmp_community(self) -> bool:
         return bool(self.snmp_community_enc)
+
+    @property
+    def alert_group_name(self) -> str | None:
+        return self.alert_group.name if self.alert_group else None
 
 
 # ---------------------------------------------------------------- check

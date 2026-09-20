@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .database import SessionLocal, init_db
 from .monitor.engine import engine
-from .routers import auth, dashboard, devices, events, metrics, system
+from .routers import auth, dashboard, devices, events, groups, metrics, system
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,6 +60,7 @@ if STATIC_DIR.exists():
 app.include_router(dashboard.router)
 app.include_router(auth.router)
 app.include_router(devices.router)
+app.include_router(groups.router)
 app.include_router(metrics.router)
 app.include_router(events.router)
 app.include_router(system.router)

@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from ..config import settings
 from ..database import SessionLocal
 from ..models import (
+    AlertGroup,
     Check,
     CheckResult,
     Device,
@@ -53,6 +54,18 @@ def _humanize(delta: timedelta) -> str:
     if not parts:
         parts.append(f"{seconds}s")
     return " ".join(parts)
+
+
+def _routing(device: Device) -> tuple[str | None, bool]:
+    """Return (telegram_chat_id, whatsapp_enabled) for a device's alerts.
+
+    A device assigned to an enabled alert group notifies that group's chat
+    only. Everything else falls back to the default chat.
+    """
+    group = device.alert_group
+    if group is not None and group.enabled:
+        return (group.telegram_chat_id or None), bool(group.whatsapp_enabled)
+    return None, True
 
 
 class MonitorEngine:
@@ -125,7 +138,7 @@ class MonitorEngine:
                 result = await db.execute(
                     select(Device)
                     .where(Device.id == device_id)
-                    .options(selectinload(Device.checks))
+                    .options(selectinload(Device.checks), selectinload(Device.alert_group))
                 )
                 device = result.scalar_one_or_none()
                 if device is None or not device.enabled:
@@ -208,6 +221,7 @@ class MonitorEngine:
     ) -> None:
         first_state = previous in (DeviceStatus.unknown, None)
         errors = "; ".join(f"{c.name}: {c.last_error}" for c in checks if c.last_error) or "no response"
+        chat_id, wa = _routing(device)
 
         if current == DeviceStatus.down and previous != DeviceStatus.down:
             device.last_down_at = now
@@ -216,7 +230,8 @@ class MonitorEngine:
                           message=f"Device DOWN - {errors}", notified=False)
             db.add(event)
             if device.notify and not first_state:
-                ok = await notifier.device_down(device.name, device.host, errors)
+                ok = await notifier.device_down(device.name, device.host, errors,
+                                                chat_id=chat_id, whatsapp=wa)
                 event.notified = bool(ok)
             log.warning("Device %s (%s) DOWN: %s", device.name, device.host, errors)
 
@@ -228,14 +243,16 @@ class MonitorEngine:
                           message=f"Device UP (downtime {downtime})", notified=False)
             db.add(event)
             if device.notify:
-                ok = await notifier.device_up(device.name, device.host, downtime)
+                ok = await notifier.device_up(device.name, device.host, downtime,
+                                              chat_id=chat_id, whatsapp=wa)
                 event.notified = bool(ok)
             await self._resolve_open_events(db, device.id, now)
             log.info("Device %s (%s) UP (downtime %s)", device.name, device.host, downtime)
 
         elif current == DeviceStatus.down and previous == DeviceStatus.down and device.notify:
             if await self._cooldown_elapsed(db, device.id, EventType.down, settings.alert_renotify_minutes, now):
-                await notifier.device_down(device.name, device.host, f"still down - {errors}")
+                await notifier.device_down(device.name, device.host, f"still down - {errors}",
+                                           chat_id=chat_id, whatsapp=wa)
                 db.add(Event(device_id=device.id, type=EventType.down, severity=EventSeverity.critical,
                              message=f"Device still DOWN - {errors}", notified=True))
 
@@ -253,9 +270,11 @@ class MonitorEngine:
                                  message=f"High latency {device.last_latency_ms:.1f} ms (threshold {threshold:.0f} ms)",
                                  notified=True))
                     if device.notify:
-                        await notifier.high_latency(device.name, device.host, device.last_latency_ms, threshold)
+                        await notifier.high_latency(device.name, device.host, device.last_latency_ms,
+                                                    threshold, chat_id=chat_id, whatsapp=wa)
 
     async def _handle_metric_alerts(self, db, device: Device, now: datetime) -> None:
+        chat_id, wa = _routing(device)
         # CPU
         cpu_threshold = device.cpu_threshold or settings.cpu_threshold_percent
         if device.last_cpu is not None and cpu_threshold and device.last_cpu >= cpu_threshold:
@@ -266,7 +285,8 @@ class MonitorEngine:
                              notified=True))
                 if device.notify:
                     await notifier.metric_alert("High CPU", device.name, device.host,
-                                                f"{device.last_cpu:.0f}%", f"{cpu_threshold:.0f}%")
+                                                f"{device.last_cpu:.0f}%", f"{cpu_threshold:.0f}%",
+                                                chat_id=chat_id, whatsapp=wa)
 
         # RAM
         ram_threshold = device.ram_threshold or settings.ram_threshold_percent
@@ -278,7 +298,8 @@ class MonitorEngine:
                              notified=True))
                 if device.notify:
                     await notifier.metric_alert("High RAM", device.name, device.host,
-                                                f"{device.last_ram:.0f}%", f"{ram_threshold:.0f}%")
+                                                f"{device.last_ram:.0f}%", f"{ram_threshold:.0f}%",
+                                                chat_id=chat_id, whatsapp=wa)
 
     # ------------------------------------------------------- alert helpers
     @staticmethod
@@ -304,12 +325,16 @@ class MonitorEngine:
 
     # ------------------------------------------------------------- digest
     async def _maybe_digest(self, now: datetime) -> None:
-        """Periodically post an overall status summary to Telegram/WhatsApp."""
+        """Periodically post a per-group status summary to Telegram/WhatsApp.
+
+        Each alert group gets a digest scoped to *its own* devices, so client01
+        never sees client02's status.
+        """
         try:
             cfg = await load_telegram_config()
         except Exception:
             return
-        if not (cfg.ready and cfg.digest_enabled):
+        if not (cfg.enabled and cfg.token and cfg.digest_enabled):
             return
         last = self._last_digest
         if last is not None and (now - last) < timedelta(minutes=cfg.digest_minutes):
@@ -317,21 +342,38 @@ class MonitorEngine:
         self._last_digest = now
 
         async with SessionLocal() as db:
-            devices = (await db.execute(select(Device))).scalars().all()
+            devices = (await db.execute(
+                select(Device).options(selectinload(Device.alert_group))
+            )).scalars().all()
+            groups = (await db.execute(select(AlertGroup))).scalars().all()
+        group_by_id = {g.id: g for g in groups}
 
-        total = len(devices)
-        up = sum(1 for d in devices if d.status == DeviceStatus.up)
-        down = sum(1 for d in devices if d.status == DeviceStatus.down)
-        unknown = total - up - down
-        lats = [d.last_latency_ms for d in devices if d.last_latency_ms is not None]
-        avg = (sum(lats) / len(lats)) if lats else None
-        down_names = [d.name for d in devices if d.status == DeviceStatus.down]
+        buckets: dict[int | None, list[Device]] = {}
+        for d in devices:
+            gid = d.alert_group_id if (d.alert_group and d.alert_group.enabled) else None
+            buckets.setdefault(gid, []).append(d)
 
-        ok = await notifier.status_digest(
-            total=total, up=up, down=down, unknown=unknown,
-            avg_latency_ms=avg, down_devices=down_names,
-        )
-        log.info("status digest sent=%s (up=%s down=%s)", ok, up, down)
+        for gid, devs in buckets.items():
+            group = group_by_id.get(gid) if gid is not None else None
+            chat_id = (group.telegram_chat_id or None) if group else None
+            wa = bool(group.whatsapp_enabled) if group else True
+            title = f"NetPulse — {group.name}" if group else "NetPulse Status"
+
+            total = len(devs)
+            up = sum(1 for d in devs if d.status == DeviceStatus.up)
+            down = sum(1 for d in devs if d.status == DeviceStatus.down)
+            unknown = total - up - down
+            lats = [d.last_latency_ms for d in devs if d.last_latency_ms is not None]
+            avg = (sum(lats) / len(lats)) if lats else None
+            down_names = [d.name for d in devs if d.status == DeviceStatus.down]
+
+            ok = await notifier.status_digest(
+                total=total, up=up, down=down, unknown=unknown,
+                avg_latency_ms=avg, down_devices=down_names,
+                title=title, chat_id=chat_id, whatsapp=wa,
+            )
+            log.info("status digest sent=%s group=%s (up=%s down=%s)",
+                     ok, group.name if group else "default", up, down)
 
     # ----------------------------------------------------------- retention
     async def _maybe_cleanup(self, now: datetime) -> None:

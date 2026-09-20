@@ -116,14 +116,18 @@ async def save_telegram_config(
 class TelegramNotifier:
     """Async wrapper around the Telegram Bot API."""
 
-    async def send(self, text: str, *, parse_mode: str = "HTML") -> bool:
+    async def send(self, text: str, *, parse_mode: str = "HTML", chat_id: str | None = None) -> bool:
         cfg = await load_telegram_config()
-        if not cfg.ready:
+        if not cfg.token or not cfg.enabled:
             log.debug("Telegram not configured/enabled; skipping message")
+            return False
+        target = (chat_id or cfg.chat_id or "").strip()
+        if not target:
+            log.debug("Telegram has no chat id (and none supplied); skipping message")
             return False
         url = f"{_API_BASE}/bot{cfg.token}/sendMessage"
         payload = {
-            "chat_id": cfg.chat_id,
+            "chat_id": target,
             "text": text,
             "parse_mode": parse_mode,
             "disable_web_page_preview": True,
@@ -132,58 +136,74 @@ class TelegramNotifier:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(url, json=payload)
             if resp.status_code != 200:
-                log.warning("Telegram API error %s: %s", resp.status_code, resp.text[:300])
+                log.warning("Telegram API error %s (chat %s): %s", resp.status_code, target, resp.text[:300])
                 return False
+            log.info("telegram sent -> chat %s", target)
             return True
         except httpx.HTTPError as exc:
             log.warning("Telegram request failed: %s", exc)
             return False
 
     # ------------------------------------------------------------ templates
-    async def _deliver(self, html: str) -> bool:
-        """Send to every configured channel (Telegram + WhatsApp)."""
-        ok = await self.send(html)
-        try:
-            from .whatsapp import whatsapp
-            await whatsapp.send(html)
-        except Exception as exc:  # noqa: BLE001
-            log.debug("whatsapp delivery skipped: %s", exc)
+    async def _deliver(
+        self, html: str, *, chat_id: str | None = None, whatsapp: bool = True
+    ) -> bool:
+        """Send to Telegram (optionally a specific group chat) + WhatsApp."""
+        ok = await self.send(html, chat_id=chat_id)
+        if whatsapp:
+            try:
+                from .whatsapp import whatsapp as _wa
+                await _wa.send(html)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("whatsapp delivery skipped: %s", exc)
         return ok
 
-    async def device_down(self, device_name: str, host: str, reason: str) -> bool:
+    async def device_down(
+        self, device_name: str, host: str, reason: str, *,
+        chat_id: str | None = None, whatsapp: bool = True,
+    ) -> bool:
         return await self._deliver(
             "🔴 <b>DEVICE DOWN</b>\n"
             f"<b>Name:</b> {_esc(device_name)}\n"
             f"<b>Host:</b> <code>{_esc(host)}</code>\n"
-            f"<b>Reason:</b> {_esc(reason)}"
+            f"<b>Reason:</b> {_esc(reason)}",
+            chat_id=chat_id, whatsapp=whatsapp,
         )
 
-    async def device_up(self, device_name: str, host: str, downtime: str) -> bool:
+    async def device_up(
+        self, device_name: str, host: str, downtime: str, *,
+        chat_id: str | None = None, whatsapp: bool = True,
+    ) -> bool:
         return await self._deliver(
             "🟢 <b>DEVICE UP</b>\n"
             f"<b>Name:</b> {_esc(device_name)}\n"
             f"<b>Host:</b> <code>{_esc(host)}</code>\n"
-            f"<b>Downtime:</b> {_esc(downtime)}"
+            f"<b>Downtime:</b> {_esc(downtime)}",
+            chat_id=chat_id, whatsapp=whatsapp,
         )
 
     async def high_latency(
-        self, device_name: str, host: str, latency_ms: float, threshold_ms: float
+        self, device_name: str, host: str, latency_ms: float, threshold_ms: float, *,
+        chat_id: str | None = None, whatsapp: bool = True,
     ) -> bool:
         return await self._deliver(
             "🟠 <b>HIGH LATENCY</b>\n"
             f"<b>Name:</b> {_esc(device_name)}\n"
             f"<b>Host:</b> <code>{_esc(host)}</code>\n"
-            f"<b>Latency:</b> {latency_ms:.1f} ms (threshold {threshold_ms:.0f} ms)"
+            f"<b>Latency:</b> {latency_ms:.1f} ms (threshold {threshold_ms:.0f} ms)",
+            chat_id=chat_id, whatsapp=whatsapp,
         )
 
     async def metric_alert(
-        self, title: str, device_name: str, host: str, value: str, threshold: str
+        self, title: str, device_name: str, host: str, value: str, threshold: str, *,
+        chat_id: str | None = None, whatsapp: bool = True,
     ) -> bool:
         return await self._deliver(
             f"🟠 <b>{_esc(title).upper()}</b>\n"
             f"<b>Name:</b> {_esc(device_name)}\n"
             f"<b>Host:</b> <code>{_esc(host)}</code>\n"
-            f"<b>Value:</b> {_esc(value)} (threshold {_esc(threshold)})"
+            f"<b>Value:</b> {_esc(value)} (threshold {_esc(threshold)})",
+            chat_id=chat_id, whatsapp=whatsapp,
         )
 
     async def status_digest(
@@ -195,10 +215,13 @@ class TelegramNotifier:
         unknown: int,
         avg_latency_ms: float | None,
         down_devices: list[str],
+        title: str = "NetPulse Status",
+        chat_id: str | None = None,
+        whatsapp: bool = True,
     ) -> bool:
         icon = "🟢" if down == 0 else "🔴"
         lines = [
-            f"{icon} <b>NetPulse Status</b>",
+            f"{icon} <b>{_esc(title)}</b>",
             f"Total: <b>{total}</b>   Up: <b>{up}</b>   Down: <b>{down}</b>   Unknown: {unknown}",
         ]
         if avg_latency_ms is not None:
@@ -210,7 +233,7 @@ class TelegramNotifier:
                 lines.append(f"• {_esc(name)}")
             if len(down_devices) > 15:
                 lines.append(f"… and {len(down_devices) - 15} more")
-        return await self.send("\n".join(lines))
+        return await self._deliver("\n".join(lines), chat_id=chat_id, whatsapp=whatsapp)
 
     async def test(self) -> tuple[bool, str]:
         cfg = await load_telegram_config()

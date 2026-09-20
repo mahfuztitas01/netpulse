@@ -117,7 +117,7 @@ async function loadDevices() {
   const devices = await api("/api/devices");
   const tbody = document.getElementById("devices-body");
   if (!devices.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">
+    tbody.innerHTML = `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">
       No devices yet. Click "Add Device" to start monitoring.</td></tr>`;
     return;
   }
@@ -126,6 +126,9 @@ async function loadDevices() {
       <td><a href="#" onclick="openDevice(${d.id});return false;">${esc(d.name)}</a>
           ${d.vendor ? `<div class="muted" style="font-size:12px">${esc(d.vendor)}</div>` : ""}</td>
       <td><code>${esc(d.host)}</code></td>
+      <td>${d.alert_group_name
+            ? `<span class="badge unknown">${esc(d.alert_group_name)}</span>`
+            : `<span class="muted">default</span>`}</td>
       <td>${badge(d.status)}</td>
       <td>${fmtLatency(d.last_latency_ms)}</td>
       <td>${fmtPct(d.last_cpu)}</td>
@@ -282,6 +285,8 @@ async function submitDevice(e) {
     name: document.getElementById("f-name").value.trim(),
     host: document.getElementById("f-host").value.trim(),
     vendor: document.getElementById("f-vendor").value || null,
+    alert_group_id: document.getElementById("f-group").value
+      ? Number(document.getElementById("f-group").value) : null,
     interval_seconds: Number(document.getElementById("f-interval").value || 60),
     timeout_seconds: Number(document.getElementById("f-timeout").value || 3),
     latency_threshold_ms: document.getElementById("f-threshold").value ? Number(document.getElementById("f-threshold").value) : null,
@@ -417,6 +422,111 @@ function pickChat(id) {
   document.getElementById("tg-chat").value = id;
 }
 
+/* ---------------------------------------------------------------- alert groups */
+let groupsCache = [];
+
+async function loadGroups() {
+  try { groupsCache = await api("/api/groups"); } catch (e) { groupsCache = []; }
+  const sel = document.getElementById("f-group");
+  if (sel) {
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">— default chat —</option>` +
+      groupsCache.map((g) =>
+        `<option value="${g.id}">${esc(g.name)}${g.telegram_chat_id ? "" : " ⚠ no chat id"}</option>`
+      ).join("");
+    sel.value = keep;
+  }
+  return groupsCache;
+}
+
+function openGroupsModal() {
+  document.getElementById("groups-modal").classList.add("open");
+  loadGroupsTable().catch((e) => console.error(e));
+}
+function closeGroupsModal() { document.getElementById("groups-modal").classList.remove("open"); }
+
+async function loadGroupsTable() {
+  const groups = await api("/api/groups");
+  groupsCache = groups;
+  const tbody = document.getElementById("groups-body");
+  if (!groups.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">No groups yet — create one below.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = groups.map((g) => `
+    <tr>
+      <td class="muted">${g.id}</td>
+      <td>${esc(g.name)}${g.enabled ? "" : ' <span class="muted">(disabled)</span>'}</td>
+      <td><code>${g.telegram_chat_id ? esc(g.telegram_chat_id) : "—"}</code>
+          <button class="ghost small" onclick="editGroupChat(${g.id}, '${esc(g.name)}', '${g.telegram_chat_id || ""}')">set</button></td>
+      <td>${g.whatsapp_enabled ? "🟢" : "⚪"}</td>
+      <td>${g.device_count}</td>
+      <td>
+        <button class="ghost small" onclick="testGroup(${g.id})">Test</button>
+        <button class="danger small" onclick="deleteGroup(${g.id}, '${esc(g.name)}')">Delete</button>
+      </td>
+    </tr>`).join("");
+}
+
+async function submitNewGroup(e) {
+  e.preventDefault();
+  const errBox = document.getElementById("ng-error");
+  errBox.textContent = "";
+  try {
+    await api("/api/groups", {
+      method: "POST",
+      body: JSON.stringify({
+        name: document.getElementById("ng-name").value.trim(),
+        telegram_chat_id: document.getElementById("ng-chat").value.trim() || null,
+        whatsapp_enabled: document.getElementById("ng-wa").checked,
+      }),
+    });
+    document.getElementById("new-group-form").reset();
+    document.getElementById("ng-chats").textContent = "";
+    await loadGroupsTable();
+    await loadGroups();
+    await refresh();
+  } catch (err) { errBox.textContent = err.message; }
+}
+
+async function editGroupChat(id, name, current) {
+  const v = prompt(`Telegram chat id for "${name}" (group ids start with -100):`, current || "");
+  if (v === null) return;
+  try {
+    await api(`/api/groups/${id}`, { method: "PATCH", body: JSON.stringify({ telegram_chat_id: v.trim() }) });
+    await loadGroupsTable(); await loadGroups(); await refresh();
+  } catch (e) { alert(e.message); }
+}
+
+async function testGroup(id) {
+  try { const r = await api(`/api/groups/${id}/test`, { method: "POST" }); alert(r.detail); }
+  catch (e) { alert(e.message); }
+}
+
+async function deleteGroup(id, name) {
+  if (!confirm(`Delete group "${name}"? Its devices will fall back to the default chat.`)) return;
+  try {
+    await api(`/api/groups/${id}`, { method: "DELETE" });
+    await loadGroupsTable(); await loadGroups(); await refresh();
+  } catch (e) { alert(e.message); }
+}
+
+async function findGroupChats() {
+  const box = document.getElementById("ng-chats");
+  box.textContent = "Looking up chats...";
+  try {
+    const r = await api("/api/system/telegram/chats");
+    const chats = r.chats || [];
+    if (!chats.length) {
+      box.textContent = "No chats found. Add the bot to the group, send /start there, then click Find again.";
+      return;
+    }
+    box.innerHTML = chats.map((c) =>
+      `<a href="#" onclick="document.getElementById('ng-chat').value='${c.id}';return false;">${esc(c.title || c.type || "chat")} (${c.id})</a>`
+    ).join("<br>");
+  } catch (e) { box.textContent = e.message; }
+}
+
 /* ---------------------------------------------------------------- users */
 let currentUser = null;
 
@@ -517,6 +627,7 @@ async function init() {
     return;   // block the dashboard until the password is changed
   }
   await loadVendors().catch(() => {});
+  await loadGroups().catch(() => {});
   await refresh();
   setInterval(refresh, REFRESH_MS);
 }
@@ -534,6 +645,10 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("f-snmp-enabled").addEventListener("change", onSnmpToggle);
   document.getElementById("f-snmp-version").addEventListener("change", onSnmpVersionChange);
   document.getElementById("btn-telegram").addEventListener("click", openTelegramModal);
+  document.getElementById("btn-groups").addEventListener("click", openGroupsModal);
+  document.getElementById("btn-close-groups").addEventListener("click", closeGroupsModal);
+  document.getElementById("new-group-form").addEventListener("submit", submitNewGroup);
+  document.getElementById("ng-find").addEventListener("click", findGroupChats);
   document.getElementById("btn-close-tg").addEventListener("click", closeTelegramModal);
   document.getElementById("tg-save").addEventListener("click", saveTelegram);
   document.getElementById("tg-test").addEventListener("click", testTelegramSettings);

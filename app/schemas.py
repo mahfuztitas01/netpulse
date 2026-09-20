@@ -104,6 +104,7 @@ class DeviceBase(BaseModel):
     timeout_seconds: float = Field(default=3.0, gt=0, le=60)
     latency_threshold_ms: float | None = Field(default=None, ge=0)
     notify: bool = True
+    alert_group_id: int | None = None
     cpu_threshold: float | None = Field(default=None, ge=0, le=100)
     ram_threshold: float | None = Field(default=None, ge=0, le=100)
     metrics_interval_seconds: int | None = Field(default=None, ge=10, le=86400)
@@ -124,6 +125,7 @@ class DeviceUpdate(BaseModel):
     timeout_seconds: float | None = Field(default=None, gt=0, le=60)
     latency_threshold_ms: float | None = Field(default=None, ge=0)
     notify: bool | None = None
+    alert_group_id: int | None = None
     cpu_threshold: float | None = Field(default=None, ge=0, le=100)
     ram_threshold: float | None = Field(default=None, ge=0, le=100)
     metrics_interval_seconds: int | None = Field(default=None, ge=10, le=86400)
@@ -147,6 +149,7 @@ class DeviceOut(DeviceBase):
     snmp_port: int
     snmp_v3_user: str | None = None
     has_snmp_community: bool = False
+    alert_group_name: str | None = None
     last_latency_ms: float | None = None
     last_cpu: float | None = None
     last_ram: float | None = None
@@ -166,11 +169,42 @@ class DeviceSummary(BaseModel):
     host: str
     vendor: str | None = None
     status: DeviceStatus
+    alert_group_id: int | None = None
+    alert_group_name: str | None = None
     last_latency_ms: float | None = None
     last_cpu: float | None = None
     last_ram: float | None = None
     last_checked_at: datetime | None = None
     uptime_percent: float | None = None
+
+
+# ---------------------------------------------------------------- alert groups
+class AlertGroupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = None
+    telegram_chat_id: str | None = None
+    whatsapp_enabled: bool = False
+    enabled: bool = True
+
+
+class AlertGroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = None
+    telegram_chat_id: str | None = None
+    whatsapp_enabled: bool | None = None
+    enabled: bool | None = None
+
+
+class AlertGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    description: str | None = None
+    telegram_chat_id: str | None = None
+    whatsapp_enabled: bool
+    enabled: bool
+    device_count: int = 0
+    created_at: datetime
 
 
 # ---------------------------------------------------------------- interfaces & metrics

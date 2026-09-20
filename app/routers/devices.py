@@ -99,7 +99,7 @@ async def list_devices(
     if enabled_only:
         stmt = stmt.where(Device.enabled.is_(True))
     stmt = stmt.order_by(Device.name)
-    result = await db.execute(stmt)
+    result = await db.execute(stmt.options(selectinload(Device.alert_group)))
     devices = result.scalars().all()
 
     up = await _uptime_map(db, [d.id for d in devices])
@@ -110,6 +110,8 @@ async def list_devices(
             host=d.host,
             vendor=d.vendor,
             status=d.status,
+            alert_group_id=d.alert_group_id,
+            alert_group_name=d.alert_group_name,
             last_latency_ms=d.last_latency_ms,
             last_cpu=d.last_cpu,
             last_ram=d.last_ram,

@@ -45,10 +45,32 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+# Columns added after the first release: (table, column, SQL type).
+# create_all() only creates missing *tables*, so new columns are patched here
+# to keep existing databases working without a migration tool.
+_ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    ("devices", "alert_group_id", "INTEGER"),
+]
+
+
+def _migrate_columns(conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(conn)
+    for table, column, ddl in _ADDED_COLUMNS:
+        try:
+            existing = {c["name"] for c in insp.get_columns(table)}
+        except Exception:  # table does not exist yet
+            continue
+        if column not in existing:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
 async def init_db() -> None:
-    """Create tables. For production use Alembic migrations instead."""
+    """Create tables and patch in columns added by newer versions."""
     # Import models so they are registered on Base.metadata.
     from . import models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_columns)

@@ -12,8 +12,7 @@
     <div class="actions">
       <span class="muted">Signed in as <b id="whoami">…</b></span>
       <button class="ghost" id="btn-refresh">Refresh</button>
-      <a class="btn ghost" href="https://web.telegram.org/k/" target="_blank" rel="noopener"
-         title="Open Telegram Web in a new tab">Telegram Web ↗</a>
+      <button class="ghost" id="btn-groups" title="Per-client alert routing">Groups</button>
       <button class="ghost" id="btn-telegram">Alerts</button>
       <button class="ghost" id="btn-users">Users</button>
       <button id="btn-add">+ Add Device</button>
@@ -41,12 +40,12 @@
       <table>
         <thead>
           <tr>
-            <th>Name</th><th>IP / Host</th><th>Status</th><th>Latency</th>
+            <th>Name</th><th>IP / Host</th><th>Group</th><th>Status</th><th>Latency</th>
             <th>CPU</th><th>RAM</th><th>Uptime 24h</th><th>Last Check</th><th>Actions</th>
           </tr>
         </thead>
         <tbody id="devices-body">
-          <tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Loading…</td></tr>
+          <tr><td colspan="10" class="muted" style="text-align:center;padding:24px">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -118,6 +117,13 @@
         <div id="row-port" style="display:none"><label>TCP Port</label><input id="f-port" type="number" placeholder="22" /></div>
         <div id="row-url" style="display:none"><label>HTTP URL</label><input id="f-url" placeholder="http://192.168.1.1/" /></div>
 
+        <div class="grid-2">
+          <div><label>Alert group <span class="muted">(who receives alerts)</span></label>
+            <select id="f-group"></select>
+          </div>
+          <div></div>
+        </div>
+
         <label class="checkbox"><input type="checkbox" id="f-snmp-enabled" /> Enable SNMP metrics (CPU / RAM / interfaces)</label>
         <div id="snmp-fields" style="display:none">
           <div class="grid-2">
@@ -175,10 +181,9 @@
         Get alerts on your phone when a device goes DOWN / UP, or when CPU, RAM or
         latency crosses a threshold.
       </p>
-      <p style="margin-top:0">
-        <a href="https://web.telegram.org/k/" target="_blank" rel="noopener"
-           style="font-weight:600">Open Telegram Web ↗</a>
-        <span class="muted"> — আপনার bot এর message এখানে দেখতে পাবেন</span>
+      <p class="muted" style="margin-top:0;font-size:13px">
+        The chat below is the <b>default</b> destination for devices that are not assigned to
+        a group. Use <b>Groups</b> in the header to give each client their own separate chat.
       </p>
 
       <label class="checkbox"><input type="checkbox" id="tg-enabled" /> Enable Telegram notifications</label>
@@ -236,6 +241,54 @@
         <button type="button" class="ghost" id="wa-test">Test WhatsApp</button>
         <button type="button" class="ghost" id="btn-close-tg">Close</button>
         <button type="button" id="tg-save">Save all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert groups (per-client routing) -->
+  <div class="modal-backdrop" id="groups-modal">
+    <div class="modal">
+      <h3>Alert Groups <span class="muted" style="font-weight:400;font-size:13px">— one chat per client</span></h3>
+      <p class="muted" style="margin-top:0">
+        Assign each device to a group so its alerts only reach that client's Telegram chat.
+        A device in <b>client01</b> can never message <b>client02</b>.
+        Devices with no group use the default chat from <b>Alerts</b>.
+      </p>
+
+      <table class="compact">
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Telegram chat id</th><th>WhatsApp</th><th>Devices</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="groups-body"><tr><td colspan="6" class="muted">—</td></tr></tbody>
+      </table>
+
+      <h4 style="margin:22px 0 6px">Add group</h4>
+      <form id="new-group-form">
+        <div class="grid-2">
+          <div><label>Group name</label><input id="ng-name" required placeholder="client01" /></div>
+          <div><label>Telegram chat id</label>
+            <div style="display:flex;gap:8px">
+              <input id="ng-chat" placeholder="-1001234567890" />
+              <button type="button" class="ghost" id="ng-find" style="white-space:nowrap">Find</button>
+            </div>
+          </div>
+        </div>
+        <label class="checkbox"><input type="checkbox" id="ng-wa" /> Also send this group's alerts to WhatsApp (personal number)</label>
+        <div class="muted" style="font-size:12px;margin-top:6px" id="ng-chats"></div>
+        <div class="error" id="ng-error"></div>
+        <button type="submit" class="small" style="margin-top:8px">Create group</button>
+      </form>
+
+      <div class="muted" style="font-size:12px;margin-top:14px;line-height:1.7">
+        <b>Group setup:</b><br>
+        1. Telegram এ একটা group বানান (যেমন <b>client01</b>)<br>
+        2. <b>@netpulse_monitoring_bot</b> কে group এ add করুন<br>
+        3. Group এ <code>/start@netpulse_monitoring_bot</code> পাঠান<br>
+        4. এখানে <b>Find</b> চেপে chat id নিন → Create group
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="btn-close-groups">Close</button>
       </div>
     </div>
   </div>
