@@ -1,0 +1,33 @@
+# ============================================================
+# NetPulse - Network Monitoring Tool
+# Python 3.11 or 3.12 recommended (3.13/3.14 also work)
+# ============================================================
+
+# --- Web framework ---
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+
+# --- Config / validation ---
+pydantic>=2.7
+pydantic-settings>=2.3
+email-validator>=2.1
+PyYAML>=6.0
+
+# --- Database (async) ---
+SQLAlchemy[asyncio]>=2.0.30
+aiosqlite>=0.20            # default SQLite driver
+asyncpg>=0.29              # optional PostgreSQL driver
+
+# --- Auth / security ---
+PyJWT>=2.8
+bcrypt>=4.1
+cryptography>=42           # encrypt SNMP secrets at rest
+
+# --- HTTP client (Telegram + HTTP checks) ---
+httpx>=0.27
+
+# --- Network checks ---
+icmplib>=3.0.4             # ICMP ping (raw sockets -> needs privileges)
+pysnmp>=6.2,<7             # SNMP v1/v2c/v3

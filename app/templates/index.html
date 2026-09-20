@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NetPulse — Network Monitoring</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> NetPulse</div>
+    <div class="actions">
+      <span class="muted">Signed in as <b id="whoami">…</b></span>
+      <button class="ghost" id="btn-refresh">Refresh</button>
+      <button class="ghost" id="btn-telegram">Telegram</button>
+      <button class="ghost" id="btn-users">Users</button>
+      <button id="btn-add">+ Add Device</button>
+      <button class="ghost" id="btn-logout">Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="cards">
+      <div class="card"><div class="label">Total</div><div class="value" id="stat-total">—</div></div>
+      <div class="card"><div class="label">Up</div><div class="value" id="stat-up" style="color:var(--up)">—</div></div>
+      <div class="card"><div class="label">Down</div><div class="value" id="stat-down" style="color:var(--down)">—</div></div>
+      <div class="card"><div class="label">Unknown</div><div class="value" id="stat-unknown" style="color:var(--unknown)">—</div></div>
+      <div class="card"><div class="label">Avg Latency</div><div class="value" id="stat-latency">—</div></div>
+      <div class="card"><div class="label">Avg CPU</div><div class="value" id="stat-cpu">—</div></div>
+      <div class="card"><div class="label">Avg RAM</div><div class="value" id="stat-ram">—</div></div>
+      <div class="card"><div class="label">Events 24h</div><div class="value" id="stat-events">—</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span>Devices</span>
+        <span class="muted" style="font-size:12px">Last refresh: <span id="last-refresh">—</span></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>IP / Host</th><th>Status</th><th>Latency</th>
+            <th>CPU</th><th>RAM</th><th>Uptime 24h</th><th>Last Check</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="devices-body">
+          <tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Recent Events</div>
+      <div id="events-body"><div class="muted" style="padding:16px">Loading…</div></div>
+    </div>
+  </main>
+
+  <!-- Device detail drawer -->
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title" id="d-name">—</div>
+        <div class="muted" id="d-host">—</div>
+      </div>
+      <button class="ghost" id="drawer-close">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="pill-row" id="d-badges"></div>
+
+      <div class="chart-block">
+        <div class="chart-label">CPU % <span class="muted" id="d-cpu-now"></span></div>
+        <svg class="spark" id="chart-cpu" viewBox="0 0 600 120" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="chart-block">
+        <div class="chart-label">RAM % <span class="muted" id="d-ram-now"></span></div>
+        <svg class="spark" id="chart-ram" viewBox="0 0 600 120" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="chart-block">
+        <div class="chart-label">Latency (ms) <span class="muted" id="d-lat-now"></span></div>
+        <svg class="spark" id="chart-lat" viewBox="0 0 600 120" preserveAspectRatio="none"></svg>
+      </div>
+
+      <h4>Interfaces</h4>
+      <table class="compact">
+        <thead><tr><th>#</th><th>Name</th><th>Status</th><th>↓ In</th><th>↑ Out</th></tr></thead>
+        <tbody id="d-interfaces"><tr><td colspan="5" class="muted">—</td></tr></tbody>
+      </table>
+
+      <h4>Recent Events</h4>
+      <div id="d-events" class="muted">—</div>
+    </div>
+  </aside>
+
+  <!-- Add device modal -->
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <h3>Add Device</h3>
+      <p class="muted" style="margin-top:0">Configure a device, its availability check and SNMP metrics.</p>
+      <form id="add-form">
+        <div class="grid-2">
+          <div><label>Name</label><input id="f-name" required placeholder="Core Switch" /></div>
+          <div><label>IP / Hostname</label><input id="f-host" required placeholder="192.168.1.1" /></div>
+        </div>
+        <div class="grid-2">
+          <div><label>Vendor profile</label><select id="f-vendor"></select></div>
+          <div><label>Availability check</label>
+            <select id="f-check-type">
+              <option value="ping">Ping (ICMP)</option>
+              <option value="tcp">TCP Port</option>
+              <option value="snmp">SNMP GET</option>
+              <option value="http">HTTP(S)</option>
+            </select>
+          </div>
+        </div>
+        <div id="row-port" style="display:none"><label>TCP Port</label><input id="f-port" type="number" placeholder="22" /></div>
+        <div id="row-url" style="display:none"><label>HTTP URL</label><input id="f-url" placeholder="http://192.168.1.1/" /></div>
+
+        <label class="checkbox"><input type="checkbox" id="f-snmp-enabled" /> Enable SNMP metrics (CPU / RAM / interfaces)</label>
+        <div id="snmp-fields" style="display:none">
+          <div class="grid-2">
+            <div><label>SNMP version</label>
+              <select id="f-snmp-version">
+                <option value="2c">v2c</option><option value="1">v1</option><option value="3">v3</option>
+              </select>
+            </div>
+            <div><label>SNMP port</label><input id="f-snmp-port" type="number" value="161" /></div>
+          </div>
+          <div id="snmp-v12">
+            <label>Community string</label><input id="f-snmp-community" placeholder="public" autocomplete="off" />
+          </div>
+          <div id="snmp-v3" style="display:none">
+            <div class="grid-2">
+              <div><label>v3 user</label><input id="f-v3-user" autocomplete="off" /></div>
+              <div><label>Auth protocol</label>
+                <select id="f-v3-auth-proto"><option>SHA</option><option>MD5</option></select>
+              </div>
+            </div>
+            <label>Auth password</label><input id="f-v3-auth-pass" type="password" autocomplete="new-password" />
+            <div class="grid-2">
+              <div><label>Priv protocol</label>
+                <select id="f-v3-priv-proto"><option>AES</option><option>DES</option></select>
+              </div>
+              <div><label>Priv password</label><input id="f-v3-priv-pass" type="password" autocomplete="new-password" /></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div><label>Interval (s)</label><input id="f-interval" type="number" value="60" min="5" /></div>
+          <div><label>Timeout (s)</label><input id="f-timeout" type="number" value="3" step="0.5" min="0.5" /></div>
+        </div>
+        <div class="grid-2">
+          <div><label>High-latency threshold (ms)</label><input id="f-threshold" type="number" placeholder="150" /></div>
+          <div><label>CPU threshold (%)</label><input id="f-cpu-threshold" type="number" placeholder="85" /></div>
+        </div>
+        <label>RAM threshold (%)</label><input id="f-ram-threshold" type="number" placeholder="90" />
+
+        <div class="error" id="add-error"></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="btn-close-modal">Cancel</button>
+          <button type="submit">Save Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Telegram settings -->
+  <div class="modal-backdrop" id="tg-modal">
+    <div class="modal">
+      <h3>Telegram Notifications</h3>
+      <p class="muted" style="margin-top:0">
+        Get alerts on your phone when a device goes DOWN / UP, or when CPU, RAM or
+        latency crosses a threshold.
+      </p>
+
+      <label class="checkbox"><input type="checkbox" id="tg-enabled" /> Enable Telegram notifications</label>
+
+      <label>Bot token (from @BotFather)</label>
+      <input id="tg-token" type="password" autocomplete="off" placeholder="123456:ABC-DEF..." />
+      <div class="muted" style="font-size:12px;margin-top:4px" id="tg-token-hint"></div>
+
+      <label>Chat ID</label>
+      <input id="tg-chat" placeholder="123456789" />
+
+      <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.6">
+        <b>How to get these:</b><br>
+        1. Telegram এ <b>@BotFather</b> → <code>/newbot</code> → token copy করুন<br>
+        2. আপনার bot কে একটা message পাঠান<br>
+        3. <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> খুলে <b>chat id</b> নিন
+      </div>
+
+      <div class="error" id="tg-error"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:22px 0" />
+
+      <h4 style="margin:0 0 6px">WhatsApp <span class="muted" style="font-weight:400">(CallMeBot — free, personal use)</span></h4>
+      <label class="checkbox"><input type="checkbox" id="wa-enabled" /> Enable WhatsApp notifications</label>
+      <div class="grid-2">
+        <div><label>Your WhatsApp number</label><input id="wa-phone" placeholder="+8801XXXXXXXXX" /></div>
+        <div><label>API key</label><input id="wa-apikey" type="password" autocomplete="off" placeholder="123456" /></div>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:4px" id="wa-hint"></div>
+      <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">
+        <b>How to get the API key:</b><br>
+        1. WhatsApp এ <b>+34 623 91 22 04</b> save করুন<br>
+        2. এই message পাঠান: <code>I allow callmebot to send me messages</code><br>
+        3. Reply তে API key পাবেন
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="tg-test">Test Telegram</button>
+        <button type="button" class="ghost" id="wa-test">Test WhatsApp</button>
+        <button type="button" class="ghost" id="btn-close-tg">Close</button>
+        <button type="button" id="tg-save">Save all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Users & passwords -->
+  <div class="modal-backdrop" id="users-modal">
+    <div class="modal">
+      <h3>Users &amp; Passwords</h3>
+
+      <h4 style="margin:16px 0 6px">My account</h4>
+      <form id="my-pw-form">
+        <div class="grid-2">
+          <div><label>Current password</label><input id="my-pw-current" type="password" required /></div>
+          <div><label>New password (min 8)</label><input id="my-pw-new" type="password" minlength="8" required /></div>
+        </div>
+        <div class="error" id="my-pw-error"></div>
+        <button type="submit" class="small" style="margin-top:8px">Change my password</button>
+      </form>
+
+      <h4 style="margin:22px 0 6px">Create user</h4>
+      <form id="new-user-form">
+        <div class="grid-2">
+          <div><label>Username</label><input id="nu-username" minlength="3" required /></div>
+          <div><label>Email</label><input id="nu-email" type="email" required /></div>
+        </div>
+        <div class="grid-2">
+          <div><label>Password (min 8)</label><input id="nu-password" type="password" minlength="8" required /></div>
+          <div><label>Role</label>
+            <select id="nu-superuser">
+              <option value="false">User</option>
+              <option value="true">Administrator (superuser)</option>
+            </select>
+          </div>
+        </div>
+        <div class="error" id="nu-error"></div>
+        <button type="submit" class="small" style="margin-top:8px">Create user</button>
+      </form>
+
+      <h4 style="margin:22px 0 6px">All users</h4>
+      <table class="compact">
+        <thead><tr><th>#</th><th>Username</th><th>Email</th><th>Active</th><th>Role</th><th>Actions</th></tr></thead>
+        <tbody id="users-body"><tr><td colspan="6" class="muted">—</td></tr></tbody>
+      </table>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="btn-close-users">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forced password change (first login) -->
+  <div class="modal-backdrop" id="pw-modal">
+    <div class="modal">
+      <h3>⚠️ Change your password</h3>
+      <p class="muted" style="margin-top:0">
+        This account is using a generated / default password. For security you must set a
+        new password before using NetPulse.
+      </p>
+      <form id="pw-form">
+        <label>Current password</label>
+        <input id="pw-current" type="password" autocomplete="current-password" required />
+        <label>New password (min 8 characters)</label>
+        <input id="pw-new" type="password" autocomplete="new-password" minlength="8" required />
+        <label>Confirm new password</label>
+        <input id="pw-confirm" type="password" autocomplete="new-password" minlength="8" required />
+        <div class="error" id="pw-error"></div>
+        <div class="modal-actions">
+          <button type="submit">Update password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

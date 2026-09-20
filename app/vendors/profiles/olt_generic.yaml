@@ -1,0 +1,32 @@
+# Generic OLT profile (GPON/EPON OLTs: Huawei, ZTE, VSOL, C-Data, etc.).
+# OLT CPU/RAM OIDs are highly vendor-specific and often unavailable via SNMP,
+# so this profile focuses on uptime + interface traffic (which is universal),
+# and falls back to HOST-RESOURCES for CPU/RAM where supported.
+#
+# [MANUAL ACTION] If your OLT exposes vendor CPU/RAM OIDs, copy this file to
+#   e.g. `olt_huawei.yaml`, set the correct `oid`s and set the device vendor to
+#   the new profile key.
+key: olt_generic
+label: OLT (Generic)
+description: GPON/EPON OLT - interface traffic + uptime (vendor CPU/RAM optional).
+
+cpu:
+  mode: walk_avg
+  oid: 1.3.6.1.2.1.25.3.3.1.2
+
+ram:
+  mode: host_resources
+
+uptime:
+  oid: 1.3.6.1.2.1.1.3.0
+
+interfaces:
+  name_oid: 1.3.6.1.2.1.31.1.1.1.1
+  alias_oid: 1.3.6.1.2.1.31.1.1.1.18
+  type_oid: 1.3.6.1.2.1.2.2.1.3
+  oper_oid: 1.3.6.1.2.1.2.2.1.8
+  speed_oid: 1.3.6.1.2.1.31.1.1.1.15
+  in_oid: 1.3.6.1.2.1.31.1.1.1.6
+  out_oid: 1.3.6.1.2.1.31.1.1.1.10
+  in_oid32: 1.3.6.1.2.1.2.2.1.10
+  out_oid32: 1.3.6.1.2.1.2.2.1.16

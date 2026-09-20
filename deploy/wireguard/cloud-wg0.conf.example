@@ -1,0 +1,29 @@
+# ============================================================================
+# NetPulse cloud-side WireGuard interface (wg0)
+# Path on the VM:  /etc/wireguard/wg0.conf
+#
+# [MANUAL ACTION] Fill in the four values marked <...>:
+#   - <CLOUD_PRIVATE_KEY>  : output of  wg genkey
+#   - <MIKROTIK_PUBLIC_KEY>: public key generated on the MikroTik
+#   - <OFFICE_LAN_CIDR>    : e.g. 192.168.1.0/24
+#
+# Then:  sudo systemctl enable --now wg-quick@wg0
+# ============================================================================
+[Interface]
+# Private address of this cloud peer inside the tunnel
+Address = 10.200.0.1/24
+ListenPort = 51820
+PrivateKey = <CLOUD_PRIVATE_KEY>
+# Optional: NAT so tunnel clients can reach the internet through the VM
+# PostUp   = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+# PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+# ---- Office MikroTik peer (initiates the tunnel; no office port-forward needed) ----
+[Peer]
+PublicKey = <MIKROTIK_PUBLIC_KEY>
+# MikroTik tunnel IP + the office LAN(s) the cloud must reach
+AllowedIPs = 10.200.0.2/32, <OFFICE_LAN_CIDR>
+# No Endpoint needed because the MikroTik initiates (it is the client).
+# If instead the cloud should initiate, set:
+# Endpoint = <OFFICE_PUBLIC_IP>:51820
+PersistentKeepalive = 25

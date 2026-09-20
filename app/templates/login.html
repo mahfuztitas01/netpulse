@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NetPulse — Login</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <h1>NetPulse</h1>
+      <p class="sub">Network Monitoring Dashboard</p>
+      <form id="login-form">
+        <label>Username</label>
+        <input id="username" autocomplete="username" required />
+        <label>Password</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+        <div class="error" id="login-error"></div>
+        <button type="submit">Sign in</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("login-form");
+    const errBox = document.getElementById("login-error");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errBox.textContent = "";
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "Login failed");
+        }
+        window.location.href = "/";
+      } catch (err) {
+        errBox.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

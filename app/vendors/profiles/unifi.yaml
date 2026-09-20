@@ -1,0 +1,33 @@
+# UniFi (Ubiquiti) profile - Access Points, switches, gateways.
+# UniFi devices expose limited SNMP; HOST-RESOURCES is used as the safe default.
+key: unifi
+label: UniFi (Ubiquiti)
+description: UniFi Access Points, switches and gateways (SNMP must be enabled in the UniFi controller).
+
+cpu:
+  mode: walk_avg
+  oid: 1.3.6.1.2.1.25.3.3.1.2   # hrProcessorLoad
+  fallback:
+    mode: percent
+    oid: 1.3.6.1.4.1.41112.1.4.1.2.1.0
+
+ram:
+  mode: host_resources
+  fallback:
+    mode: free_total
+    total_oid: 1.3.6.1.4.1.41112.1.4.1.3.1.0
+    free_oid: 1.3.6.1.4.1.41112.1.4.1.3.2.0
+
+uptime:
+  oid: 1.3.6.1.2.1.1.3.0
+
+interfaces:
+  name_oid: 1.3.6.1.2.1.31.1.1.1.1
+  alias_oid: 1.3.6.1.2.1.31.1.1.1.18
+  type_oid: 1.3.6.1.2.1.2.2.1.3
+  oper_oid: 1.3.6.1.2.1.2.2.1.8
+  speed_oid: 1.3.6.1.2.1.31.1.1.1.15
+  in_oid: 1.3.6.1.2.1.31.1.1.1.6
+  out_oid: 1.3.6.1.2.1.31.1.1.1.10
+  in_oid32: 1.3.6.1.2.1.2.2.1.10
+  out_oid32: 1.3.6.1.2.1.2.2.1.16

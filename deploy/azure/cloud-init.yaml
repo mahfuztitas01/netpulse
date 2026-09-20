@@ -1,0 +1,70 @@
+#cloud-config
+# ============================================================================
+# NetPulse — one-shot bootstrap for Azure for Students (Ubuntu 22.04 / 24.04)
+#
+# HOW TO USE
+#   Azure Portal -> Create a VM -> Advanced tab -> "Custom data"
+#   Paste this ENTIRE file, then create the VM.
+#   On first boot the VM downloads NetPulse and installs it automatically.
+#
+# AFTER BOOT
+#   ssh into the VM and read the generated admin password:
+#       sudo cat /root/netpulse-admin.txt
+#   Then open:  http://<VM_PUBLIC_IP>:8000
+#
+# NOTE: the app is fetched from a link shared by the project owner. If you
+# prefer, replace APP_ZIP_URL with your own (e.g. a private GitHub release).
+# ============================================================================
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - python3
+  - ca-certificates
+
+write_files:
+  - path: /opt/netpulse-bootstrap.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+
+      APP_ZIP_URL="https://drive.google.com/uc?export=download&id=19Cr3ZV-M4nQp9PgggN2NTwc2_4zbeBIX"
+      WORK=/tmp/netpulse-install
+
+      echo "=== [NetPulse] downloading application ==="
+      rm -rf "$WORK"
+      mkdir -p "$WORK"
+      cd "$WORK"
+      curl -fsSL --retry 3 -o app.zip "$APP_ZIP_URL"
+
+      echo "=== [NetPulse] extracting ==="
+      python3 -c "import zipfile; zipfile.ZipFile('app.zip').extractall('.')"
+
+      if [ ! -d "$WORK/netpulse" ]; then
+        echo "ERROR: expected a 'netpulse' folder inside the archive"
+        exit 1
+      fi
+
+      cd "$WORK/netpulse"
+
+      # be defensive about line endings
+      find . -name "*.sh" -exec sed -i 's/\r$//' {} +
+
+      echo "=== [NetPulse] running installer (scripts/setup.sh) ==="
+      chmod +x scripts/setup.sh
+      ./scripts/setup.sh
+
+      # expose the generated admin password at a stable path
+      if [ -f /opt/netpulse/.env ]; then
+        grep '^FIRST_ADMIN_PASSWORD=' /opt/netpulse/.env > /root/netpulse-admin.txt || true
+        chmod 600 /root/netpulse-admin.txt
+      fi
+
+      echo "=== [NetPulse] done. Admin password: /root/netpulse-admin.txt ==="
+
+runcmd:
+  - [ bash, /opt/netpulse-bootstrap.sh ]
