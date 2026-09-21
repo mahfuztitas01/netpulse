@@ -51,16 +51,21 @@ def build_payload() -> dict:
     config = read_json(CONFIG_PATH, {})
     state = read_json(STATE_PATH, {})
     prev = state.get("devices") or {}
+    labels = config.get("group_labels") or {}
 
     devices = []
     for dev in config.get("devices") or []:
         name = dev.get("name") or dev.get("host") or "unnamed"
         entry = prev.get(name) or {}
+        group_key = dev.get("alert_group") or "default"
         devices.append(
             {
                 "name": name,
                 "host": dev.get("host") or "",
-                "group": dev.get("alert_group") or "default",
+                "group": group_key,
+                "group_label": labels.get(group_key) or (
+                    "Default (your personal chat)" if group_key == "default" else group_key
+                ),
                 "checks": "+".join(c.get("type", "?") for c in (dev.get("checks") or [])),
                 "status": entry.get("status") or "unknown",
                 "latency": entry.get("latency_ms"),
@@ -331,16 +336,18 @@ function render(d){
     <tr>
       <td>${esc(x.name)}<div style="color:var(--muted);font-size:11px">${esc(x.checks)}</div></td>
       <td><code>${esc(x.host)}</code></td>
-      <td>${esc(x.group)}</td>
+      <td>${esc(x.group_label || x.group)}</td>
       <td><span class="b ${esc(x.status)}">${esc(String(x.status).toUpperCase())}</span></td>
       <td>${fmtLat(x.latency)}</td>
       <td><button class="ghost mini" data-del="${esc(x.name)}">✕</button></td>
     </tr>`).join("");
 
   const groups = Object.keys((d.config && d.config.groups) || {});
-  groups.push("default");
+  const labels = (d.config && d.config.group_labels) || {};
+  const opts = groups.map(g => ({ v: g, t: labels[g] || g }));
+  opts.push({ v: "default", t: "Default (your personal chat)" });
   document.getElementById("d-group").innerHTML =
-    [...new Set(groups)].map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
+    opts.map(o => `<option value="${esc(o.v)}">${esc(o.t)}</option>`).join("");
 
   document.getElementById("foot").innerHTML =
     "Updated automatically by GitHub Actions.<br>Refresh this page for the latest check.";
