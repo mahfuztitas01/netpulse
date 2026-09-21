@@ -1,12 +1,15 @@
-"""Build a static, password-protected dashboard for GitHub Pages.
+"""Build the static, password-protected NetPulse dashboard for GitHub Pages.
 
-Why static: GitHub Pages only serves static files, and it is the one free host
-that needs no account of its own. The GitHub Actions monitor runs this after
-every check, so the published page reflects the latest state.
+Why static: GitHub Pages serves files only, and it is the one free host that
+needs no account of its own. GitHub Actions rebuilds this page after every
+check, so it always shows the latest state.
 
 Privacy: the payload is encrypted with AES-GCM using a key derived from
-DASHBOARD_PASSWORD (PBKDF2-SHA256). The public repo only ever holds ciphertext;
-the browser decrypts it locally after the password is entered.
+DASHBOARD_PASSWORD (PBKDF2-SHA256). The public repo only ever holds ciphertext.
+
+Device management: the page can add/remove devices by writing
+``cloud/config.json`` through the GitHub REST API. That needs a token the
+operator pastes once (stored in the browser's localStorage).
 
 Usage:
     DASHBOARD_PASSWORD=... python scripts/build_dashboard.py [output_dir]
@@ -27,6 +30,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "cloud" / "config.json"
 STATE_PATH = ROOT / "cloud" / "state.json"
+REPO = "mahfuztitas01/netpulse"
+BRANCH = "main"
 ITERATIONS = 200_000
 
 
@@ -74,6 +79,10 @@ def build_payload() -> dict:
         "down": down,
         "unknown": len(devices) - up - down,
         "devices": devices,
+        # raw config so the page can edit the device list itself
+        "config": config,
+        "repo": REPO,
+        "branch": BRANCH,
     }
 
 
@@ -99,11 +108,11 @@ TEMPLATE = """<!DOCTYPE html>
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--fg); padding:16px;
          font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
-  .wrap { max-width:820px; margin:0 auto; }
+  .wrap { max-width:840px; margin:0 auto; }
   h1 { font-size:20px; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
   .dot { width:10px; height:10px; border-radius:50%; background:#3b82f6; box-shadow:0 0 12px #3b82f6; }
   .sub { color:var(--muted); font-size:12px; margin-bottom:16px; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:10px; margin-bottom:16px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:10px; margin-bottom:16px; }
   .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; }
   .card .l { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
   .card .v { font-size:22px; font-weight:700; margin-top:4px; }
@@ -118,16 +127,26 @@ TEMPLATE = """<!DOCTYPE html>
   .b.unknown { background:rgba(138,151,181,.15); color:var(--muted); }
   code { color:var(--muted); font-size:12px; }
   .gate { background:var(--card); border:1px solid var(--border); border-radius:16px;
-          padding:26px 22px; max-width:380px; margin:12vh auto 0; text-align:center; }
+          padding:26px 22px; max-width:380px; margin:10vh auto 0; text-align:center; }
   .gate h2 { margin:0 0 6px; font-size:18px; }
   .gate p { color:var(--muted); font-size:13px; margin:0 0 16px; }
-  input { width:100%; padding:13px; border-radius:10px; border:1px solid var(--border);
-          background:#0e1424; color:var(--fg); font-size:15px; }
-  button { width:100%; margin-top:10px; padding:13px; border:none; border-radius:10px;
-           background:#3b82f6; color:#fff; font-weight:700; font-size:15px; cursor:pointer; }
-  button:disabled { opacity:.6; cursor:default; }
+  input,select { width:100%; padding:12px; border-radius:10px; border:1px solid var(--border);
+          background:#0e1424; color:var(--fg); font-size:14px; margin-top:4px; }
+  label { color:var(--muted); font-size:12px; display:block; margin-top:10px; }
+  button { padding:12px 16px; border:none; border-radius:10px; background:#3b82f6;
+           color:#fff; font-weight:700; font-size:14px; cursor:pointer; }
+  button.ghost { background:transparent; border:1px solid var(--border); color:var(--fg); font-weight:600; }
+  button.mini { padding:6px 10px; font-size:12px; }
+  button:disabled { opacity:.55; cursor:default; }
+  .row { display:flex; gap:8px; align-items:center; }
   .err { color:var(--down); font-size:13px; margin-top:10px; min-height:18px; }
+  .ok { color:var(--up); }
+  .panel { background:var(--card); border:1px solid var(--border); border-radius:14px;
+           padding:16px; margin-top:16px; }
+  .panel h3 { margin:0 0 4px; font-size:15px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .foot { color:#64748b; font-size:11px; margin-top:14px; line-height:1.6; text-align:center; }
+  a { color:#60a5fa; }
 </style>
 </head>
 <body>
@@ -136,17 +155,61 @@ TEMPLATE = """<!DOCTYPE html>
     <h2><span class="dot"></span> NetPulse</h2>
     <p>Enter the dashboard password to view live status.</p>
     <input id="pw" type="password" autocomplete="current-password" placeholder="Password" />
-    <button id="go">Unlock</button>
+    <button id="go" style="width:100%;margin-top:10px">Unlock</button>
     <div class="err" id="err"></div>
   </div>
+
   <div id="app" style="display:none">
     <h1><span class="dot"></span> NetPulse</h1>
     <div class="sub" id="sub"></div>
+
     <div class="cards" id="cards"></div>
+
     <table>
-      <thead><tr><th>Device</th><th>Host</th><th>Group</th><th>Status</th><th>Latency</th></tr></thead>
+      <thead><tr><th>Device</th><th>Host</th><th>Group</th><th>Status</th><th>Latency</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
+
+    <div class="panel">
+      <h3>Add / manage devices</h3>
+      <div class="sub" id="mgmt-state"></div>
+
+      <div id="mgmt-form" style="display:none">
+        <div class="grid2">
+          <div><label>Name</label><input id="d-name" placeholder="Core Switch" /></div>
+          <div><label>IP / Hostname</label><input id="d-host" placeholder="host or IP" /></div>
+        </div>
+        <div class="grid2">
+          <div><label>Check type</label>
+            <select id="d-type">
+              <option value="ping">Ping (TCP fallback in cloud)</option>
+              <option value="tcp">TCP port</option>
+              <option value="http">HTTP(S)</option>
+            </select>
+          </div>
+          <div><label>Alert group</label><select id="d-group"></select></div>
+        </div>
+        <div class="grid2">
+          <div id="d-port-wrap"><label>TCP port</label><input id="d-port" type="number" placeholder="443" /></div>
+          <div id="d-url-wrap" style="display:none"><label>HTTP URL</label><input id="d-url" placeholder="https://example.com/" /></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="d-save">Add device</button>
+          <button class="ghost" id="d-cancel">Cancel</button>
+        </div>
+        <div class="err" id="d-err"></div>
+      </div>
+
+      <div class="row" id="mgmt-actions">
+        <button id="d-new">+ Add device</button>
+        <button class="ghost" id="d-token-btn">Set GitHub token</button>
+      </div>
+      <div class="foot" style="text-align:left">
+        Changes are saved to <code>cloud/config.json</code> on GitHub and take effect
+        on the next scheduled check (within ~15 minutes).
+      </div>
+    </div>
+
     <div class="foot" id="foot"></div>
   </div>
 </div>
@@ -154,7 +217,11 @@ TEMPLATE = """<!DOCTYPE html>
 <script>
 const BLOB = __BLOB__;
 const S = { salt: b64d(BLOB.salt), iv: b64d(BLOB.iv), ct: b64d(BLOB.ct), iter: BLOB.iter };
+let DATA = null;
+let CFG = null, CFG_SHA = null, REPO = "", BRANCH = "main";
+
 function b64d(s){ const b=atob(s); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
+function b64e(s){ return btoa(unescape(encodeURIComponent(s))); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function fmtLat(v){ return v==null ? "—" : Number(v).toFixed(1)+" ms"; }
 function fmtT(v){ if(!v) return "—"; const d=new Date(v); return isNaN(d)?"—":d.toLocaleString(); }
@@ -168,7 +235,45 @@ async function unlock(pw){
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
+/* ---------------- GitHub API (device management) ---------------- */
+function ghToken(){ return localStorage.getItem("np_gh_token") || ""; }
+
+async function ghGetConfig(){
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json?ref=${BRANCH}`, {
+    headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json" }
+  });
+  if (r.status === 401 || r.status === 403) throw new Error("GitHub token invalid or expired");
+  if (!r.ok) throw new Error("GitHub error " + r.status);
+  const j = await r.json();
+  CFG_SHA = j.sha;
+  CFG = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\\n/g, "")))));
+  return CFG;
+}
+
+async function ghSaveConfig(message){
+  const body = {
+    message,
+    content: b64e(JSON.stringify(CFG, null, 2)),
+    sha: CFG_SHA,
+    branch: BRANCH,
+  };
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json`, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json",
+               "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error("GitHub save failed (" + r.status + "): " + t.slice(0, 140));
+  }
+  const j = await r.json();
+  CFG_SHA = j.content && j.content.sha ? j.content.sha : CFG_SHA;
+}
+
+/* ---------------- rendering ---------------- */
 function render(d){
+  DATA = d; REPO = d.repo || ""; BRANCH = d.branch || "main";
   document.getElementById("gate").style.display = "none";
   document.getElementById("app").style.display = "block";
   document.getElementById("sub").textContent =
@@ -177,6 +282,7 @@ function render(d){
     ["Total", d.total, "var(--fg)"], ["Up", d.up, "var(--up)"],
     ["Down", d.down, "var(--down)"], ["Unknown", d.unknown, "var(--muted)"],
   ].map(([l,v,c])=>`<div class="card"><div class="l">${l}</div><div class="v" style="color:${c}">${v}</div></div>`).join("");
+
   document.getElementById("rows").innerHTML = (d.devices||[]).map(x=>`
     <tr>
       <td>${esc(x.name)}<div style="color:var(--muted);font-size:11px">${esc(x.checks)}</div></td>
@@ -184,9 +290,80 @@ function render(d){
       <td>${esc(x.group)}</td>
       <td><span class="b ${esc(x.status)}">${esc(String(x.status).toUpperCase())}</span></td>
       <td>${fmtLat(x.latency)}</td>
+      <td><button class="ghost mini" data-del="${esc(x.name)}">✕</button></td>
     </tr>`).join("");
+
+  const groups = Object.keys((d.config && d.config.groups) || {});
+  groups.push("default");
+  document.getElementById("d-group").innerHTML =
+    [...new Set(groups)].map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
+
   document.getElementById("foot").innerHTML =
     "Updated automatically by GitHub Actions.<br>Refresh this page for the latest check.";
+
+  document.querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", () => removeDevice(b.getAttribute("data-del"))));
+
+  const has = !!ghToken();
+  document.getElementById("mgmt-state").innerHTML = has
+    ? '<span class="ok">GitHub token saved — you can add/remove devices.</span>'
+    : 'To add devices here, tap <b>Set GitHub token</b> once (a fine-grained token with <code>Contents: read and write</code> on <code>' + esc(d.repo) + '</code>).';
+  document.getElementById("mgmt-actions").style.display = has ? "flex" : "flex";
+}
+
+/* ---------------- device actions ---------------- */
+async function addDevice(){
+  const err = document.getElementById("d-err");
+  err.textContent = "";
+  const name = document.getElementById("d-name").value.trim();
+  const host = document.getElementById("d-host").value.trim();
+  const type = document.getElementById("d-type").value;
+  const group = document.getElementById("d-group").value;
+  if (!name || !host) { err.textContent = "Name and host are required."; return; }
+  const params = {};
+  if (type === "tcp") params.port = Number(document.getElementById("d-port").value || 443);
+  if (type === "http") params.url = document.getElementById("d-url").value.trim();
+  try {
+    await ghGetConfig();
+    CFG.devices = CFG.devices || [];
+    if (CFG.devices.some(x => (x.name||"").toLowerCase() === name.toLowerCase())) {
+      err.textContent = "A device with that name already exists.";
+      return;
+    }
+    CFG.devices.push({ name, host, alert_group: group, timeout_seconds: 5,
+                       checks: [{ type, params }] });
+    await ghSaveConfig("feat(cloud): add device " + name);
+    document.getElementById("mgmt-form").style.display = "none";
+    err.textContent = "";
+    alert("Saved. It will start being checked within ~15 minutes.");
+  } catch (e) { err.textContent = e.message; }
+}
+
+async function removeDevice(name){
+  if (!confirm('Remove device "' + name + '" from cloud monitoring?')) return;
+  try {
+    await ghGetConfig();
+    const before = (CFG.devices || []).length;
+    CFG.devices = (CFG.devices || []).filter(x => (x.name || "") !== name);
+    if (CFG.devices.length === before) { alert("Device not found."); return; }
+    await ghSaveConfig("chore(cloud): remove device " + name);
+    alert("Removed. Refresh in a moment to see the updated list.");
+  } catch (e) { alert(e.message); }
+}
+
+function setToken(){
+  const t = prompt("Paste a GitHub token with Contents read+write on\\n" + REPO + "\\n\\n(it is stored only in this browser)");
+  if (t === null) return;
+  if (!t.trim()) { localStorage.removeItem("np_gh_token"); }
+  else { localStorage.setItem("np_gh_token", t.trim()); }
+  render(DATA);
+}
+
+/* ---------------- wiring ---------------- */
+function onTypeChange(){
+  const t = document.getElementById("d-type").value;
+  document.getElementById("d-port-wrap").style.display = t === "tcp" ? "block" : "none";
+  document.getElementById("d-url-wrap").style.display = t === "http" ? "block" : "none";
 }
 
 async function tryUnlock(){
@@ -206,11 +383,19 @@ async function tryUnlock(){
 
 document.getElementById("go").addEventListener("click", tryUnlock);
 document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+document.getElementById("d-new").addEventListener("click", () => {
+  document.getElementById("mgmt-form").style.display = "block"; onTypeChange();
+});
+document.getElementById("d-cancel").addEventListener("click", () => {
+  document.getElementById("mgmt-form").style.display = "none";
+});
+document.getElementById("d-save").addEventListener("click", addDevice);
+document.getElementById("d-token-btn").addEventListener("click", setToken);
+document.getElementById("d-type").addEventListener("change", onTypeChange);
+
 (async () => {
   const saved = sessionStorage.getItem("np_pw");
-  if (saved) {
-    try { render(await unlock(saved)); return; } catch (e) {}
-  }
+  if (saved) { try { render(await unlock(saved)); return; } catch (e) {} }
   document.getElementById("pw").focus();
 })();
 </script>
@@ -229,7 +414,6 @@ def main() -> int:
         blob = encrypt(payload, password)
         print(f"encrypted dashboard ({len(blob['ct'])} b64 chars)")
     else:
-        # No password set -> publish a placeholder rather than leaking data.
         blob = encrypt({"error": "DASHBOARD_PASSWORD not set"}, "netpulse-disabled")
         print("!! DASHBOARD_PASSWORD not set - publishing a locked placeholder")
 
