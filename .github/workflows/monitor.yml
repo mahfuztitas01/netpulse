@@ -43,6 +43,36 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: python scripts/cloud_check.py
 
+      - name: Build the static dashboard
+        env:
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: python scripts/build_dashboard.py docs
+
+      - name: Publish dashboard to GitHub Pages
+        env:
+          LINK_TOKEN: ${{ secrets.LINK_REPO_TOKEN }}
+        run: |
+          if [ -z "$LINK_TOKEN" ]; then
+            echo "LINK_REPO_TOKEN not set - skipping dashboard publish"
+            exit 0
+          fi
+          cd "$RUNNER_TEMP"
+          git clone --depth 1 \
+            "https://x-access-token:${LINK_TOKEN}@github.com/mahfuztitas01/netpulse-link.git" link
+          cp "$GITHUB_WORKSPACE/docs/index.html" link/index.html
+          cp "$GITHUB_WORKSPACE/docs/.nojekyll" link/.nojekyll
+          cd link
+          git config user.name  "netpulse-bot"
+          git config user.email "netpulse-bot@users.noreply.github.com"
+          git add -A
+          if git diff --quiet --cached; then
+            echo "dashboard unchanged"
+          else
+            git commit -m "chore: update NetPulse dashboard [skip ci]"
+            git push
+            echo "dashboard published -> https://mahfuztitas01.github.io/netpulse-link/"
+          fi
+
       - name: Persist state
         run: |
           if git diff --quiet -- cloud/state.json; then

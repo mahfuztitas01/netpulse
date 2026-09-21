@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0b1020" />
+<title>NetPulse</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b1020; --card:#141a2e; --border:#26304f;
+          --fg:#e6ebf5; --muted:#8a97b5; --up:#22c55e; --down:#ef4444; --warn:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); padding:16px;
+         font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
+  .wrap { max-width:820px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#3b82f6; box-shadow:0 0 12px #3b82f6; }
+  .sub { color:var(--muted); font-size:12px; margin-bottom:16px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:10px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; }
+  .card .l { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .card .v { font-size:22px; font-weight:700; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; background:var(--card);
+          border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  th,td { padding:10px 12px; text-align:left; font-size:13px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  tr:last-child td { border-bottom:none; }
+  .b { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; }
+  .b.up { background:rgba(34,197,94,.15); color:var(--up); }
+  .b.down { background:rgba(239,68,68,.15); color:var(--down); }
+  .b.unknown { background:rgba(138,151,181,.15); color:var(--muted); }
+  code { color:var(--muted); font-size:12px; }
+  .gate { background:var(--card); border:1px solid var(--border); border-radius:16px;
+          padding:26px 22px; max-width:380px; margin:12vh auto 0; text-align:center; }
+  .gate h2 { margin:0 0 6px; font-size:18px; }
+  .gate p { color:var(--muted); font-size:13px; margin:0 0 16px; }
+  input { width:100%; padding:13px; border-radius:10px; border:1px solid var(--border);
+          background:#0e1424; color:var(--fg); font-size:15px; }
+  button { width:100%; margin-top:10px; padding:13px; border:none; border-radius:10px;
+           background:#3b82f6; color:#fff; font-weight:700; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:default; }
+  .err { color:var(--down); font-size:13px; margin-top:10px; min-height:18px; }
+  .foot { color:#64748b; font-size:11px; margin-top:14px; line-height:1.6; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="gate" class="gate">
+    <h2><span class="dot"></span> NetPulse</h2>
+    <p>Enter the dashboard password to view live status.</p>
+    <input id="pw" type="password" autocomplete="current-password" placeholder="Password" />
+    <button id="go">Unlock</button>
+    <div class="err" id="err"></div>
+  </div>
+  <div id="app" style="display:none">
+    <h1><span class="dot"></span> NetPulse</h1>
+    <div class="sub" id="sub"></div>
+    <div class="cards" id="cards"></div>
+    <table>
+      <thead><tr><th>Device</th><th>Host</th><th>Group</th><th>Status</th><th>Latency</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="foot" id="foot"></div>
+  </div>
+</div>
+
+<script>
+const BLOB = {"salt": "W+f80p945DMCm3l1K786mA==", "iv": "dGKfROHa0hdo4/Qm", "ct": "n3A9QA4oZypEtxrAq6qBhRv9+RXkE9FqoK7wbL+S93etiGv+sPPaCYaJah4b4Rt595tGUIF6Ew4BQnpuURXyBeXnYJ2P/YZoGeV18pz3aeMiUL0QU3wMF8TmUO+/k65lT2/Fn6VrOYHDLQUp5EOldHM09d/PDIH4w9GTEUsnfw3xxQJWXg0QbDa8+HO9gVF88JY3CQXqxF28UaAnEAWq4E+DRmfUD1qPDSTkW/sZdjWgEtOyDRyA/eklIu5pRnmpdXNTd6gFfUBGPEYOka5IHAgd0/FOG6ovT7hQ6MBnhez0o1pwFeYOtfCQuqFLUC1P8GIf/NLeXLE/jsRdZObyOMrrfKHTqHTNV0FU6fauIINjG+ex8lBylljlYJqxUSgf73oM09MSMN6kWqs3VkoRxq4QMOxHGaFm+yqr5Bh0FfhjkBwkjezHDY0Oj0tuV/AczBVirfSDIF8OeCqdb4KTzIruWmnHDky4Kb2O2w1UdUZWRmthE3tqKbxKQCLyF1OS3GJmXVIU/IIKGZ3FRn2+bpWFud8ZNcKA5e9R5QVTBBMLNnS0B197+NtS9LDZ0176RuDsEa4bzqEUyb3AiJHpBDyOAmncIeDU9wHxatojJiST5moHGjcybQ4Nzeku5xrx/2Ck/e51niHsg6iLjmTkmftD7K/GCdMVRekaQth5E6v/4KObHP/CNZydWIGHCLmyKtxvFWhwr2ALsajYr11i7zwv0/xy34IDPMU904BTGSM8prU1Hpf3QYGgNuDA0MAnKGIIG4MNm6fsWOb9zPn8XqQaVLsoxMdJti9wtTvj0rNxRqCGH9W1ewrA7dlVLTYnz9mbS+6vYdQfUw==", "iter": 200000};
+const S = { salt: b64d(BLOB.salt), iv: b64d(BLOB.iv), ct: b64d(BLOB.ct), iter: BLOB.iter };
+function b64d(s){ const b=atob(s); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtLat(v){ return v==null ? "—" : Number(v).toFixed(1)+" ms"; }
+function fmtT(v){ if(!v) return "—"; const d=new Date(v); return isNaN(d)?"—":d.toLocaleString(); }
+
+async function unlock(pw){
+  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name:"PBKDF2", salt:S.salt, iterations:S.iter, hash:"SHA-256" },
+    km, { name:"AES-GCM", length:256 }, false, ["decrypt"]);
+  const plain = await crypto.subtle.decrypt({ name:"AES-GCM", iv:S.iv }, key, S.ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+function render(d){
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("sub").textContent =
+    "Last check: " + fmtT(d.state_updated_at) + "  ·  Page built: " + fmtT(d.generated_at);
+  document.getElementById("cards").innerHTML = [
+    ["Total", d.total, "var(--fg)"], ["Up", d.up, "var(--up)"],
+    ["Down", d.down, "var(--down)"], ["Unknown", d.unknown, "var(--muted)"],
+  ].map(([l,v,c])=>`<div class="card"><div class="l">${l}</div><div class="v" style="color:${c}">${v}</div></div>`).join("");
+  document.getElementById("rows").innerHTML = (d.devices||[]).map(x=>`
+    <tr>
+      <td>${esc(x.name)}<div style="color:var(--muted);font-size:11px">${esc(x.checks)}</div></td>
+      <td><code>${esc(x.host)}</code></td>
+      <td>${esc(x.group)}</td>
+      <td><span class="b ${esc(x.status)}">${esc(String(x.status).toUpperCase())}</span></td>
+      <td>${fmtLat(x.latency)}</td>
+    </tr>`).join("");
+  document.getElementById("foot").innerHTML =
+    "Updated automatically by GitHub Actions.<br>Refresh this page for the latest check.";
+}
+
+async function tryUnlock(){
+  const pw = document.getElementById("pw").value;
+  const err = document.getElementById("err");
+  const btn = document.getElementById("go");
+  err.textContent = ""; btn.disabled = true; btn.textContent = "Checking...";
+  try {
+    const d = await unlock(pw);
+    sessionStorage.setItem("np_pw", pw);
+    render(d);
+  } catch (e) {
+    err.textContent = "Wrong password (or corrupt data).";
+    btn.disabled = false; btn.textContent = "Unlock";
+  }
+}
+
+document.getElementById("go").addEventListener("click", tryUnlock);
+document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+(async () => {
+  const saved = sessionStorage.getItem("np_pw");
+  if (saved) {
+    try { render(await unlock(saved)); return; } catch (e) {}
+  }
+  document.getElementById("pw").focus();
+})();
+</script>
+</body>
+</html>
