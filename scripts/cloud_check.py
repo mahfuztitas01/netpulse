@@ -321,17 +321,21 @@ async def main() -> int:
     # ---- per-group digest
     digest_due = last_digest is None or (now - last_digest) >= timedelta(minutes=digest_minutes)
     if digest_due:
+        labels = config.get("group_labels") or {}
         buckets: dict[str, list[str]] = {}
         for dev in devices:
             g = str(dev.get("alert_group") or "default")
             buckets.setdefault(g, []).append(dev.get("name") or dev.get("host") or "?")
         for group_name, names in buckets.items():
             chat_id = str(groups.get(group_name) or default_chat)
+            label = labels.get(group_name) or (
+                "Default" if group_name == "default" else group_name
+            )
             g_up = sum(1 for n in names if new_state.get(n, {}).get("status") == "up")
             g_down = [n for n in names if new_state.get(n, {}).get("status") == "down"]
             icon = "🟢" if not g_down else "🔴"
             lines = [
-                f"{icon} <b>NetPulse — {esc(group_name)}</b>",
+                f"{icon} <b>NetPulse — {esc(label)}</b>",
                 f"Total: <b>{len(names)}</b>   Up: <b>{g_up}</b>   Down: <b>{len(g_down)}</b>",
             ]
             if g_down:
