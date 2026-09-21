@@ -106,10 +106,14 @@
       <div class="row" id="mgmt-actions">
         <button id="d-new">+ Add device</button>
         <button class="ghost" id="d-token-btn">Set GitHub token</button>
+        <button class="ghost" id="d-test-btn">Test token</button>
       </div>
+      <div class="err" id="d-token-msg"></div>
       <div class="foot" style="text-align:left">
         Changes are saved to <code>cloud/config.json</code> on GitHub and take effect
-        on the next scheduled check (within ~15 minutes).
+        on the next scheduled check (within ~15 minutes).<br>
+        Tip: you can type <code>host:port</code> in the Host box (e.g. <code>103.112.55.209:8002</code>)
+        and it is saved as a TCP check automatically.
       </div>
     </div>
 
@@ -118,7 +122,7 @@
 </div>
 
 <script>
-const BLOB = {"salt": "ZR+s6WuXIwCpMZqojz2mUg==", "iv": "zlHpbcpSsoy+2WOE", "ct": "98mTskH1D8PGENHEgbG4hkJo/PhJMFa0V7uY6MScmEnef8dYFwu3uiInIY0llMYt2EJGcTNhYpVsMeoRkQWX7wlt0FKj+GkSAEHy9q+J8KYKXjB/RYmg56xcHxTauscmvR9D/WptRFJCjT8OjOtzg65d4kj5KqWQq+iG1e4V84jmBd62MA4RCvujAcIgaOwDySKOQQOgRTCYjDeEZ7ZC0O8SZQ7MtjBlUlOUOggMfwcIsdsXwsfIRzPAW3QdXAFIfR+GzvWlG2up9QVvOnj0FqdCr7G7sDFcV60/kp7kwkjNHRlzatQl/kDNjaJPYaozE9fIChmPbmc4FASUgLlrhrdPoxbDnCPJMaIFlYmKp01plKwKnb0sudCa7Cs5l1EQ5DdxBJS+oEN5y154c3qIN1cu18/6D0N/0koMt0Fn1EIOZXGUwTTJz4ws1rHxd0IH5iwMQ0A6NTvsPKXSTzu3x+ZM6951MQ2W4NHOMm6MrMGs/TQeS2PZIPov52L4qvOEobPc2G8O5DgmYu7/AjABhKIkCHsHkZzKJikCPFYy5aYXr08IznzzQ/rKPwFMJD8gz7lpWik56PdZE1FfT3E+56TZiDmyQxiCrcfKXKeqwtI/qKFx5srS7SD3461ow06F7OsRHwp70lvQvk7lNHpHiJral2BKgSNCfw3pKXoIhT4Gyo0ptrN8X41YNODwB+1z26aPlBZc8YOI6Z3TMOJriZyp5v3XRaQ0FaqIfzgHnktnNdbxdlk70AIpAyhmQKPSHuIbFopEEnhtrV0fp1WzREFe3L5Xsz6WWbLmx+ZCN51sOCeOfswv0w4SFm6f8fTM82LXuX75dqRqZDUsgRvf2k7Iexile1QEtYi+3W4eoV1vNuJGx4IPFTaFPe40raD3I1VrhT4RTn7ZRFvIOlsxcH/R65qNik8vUYRZAXCQXI1N5RtSjqDB60XRpq/QYMPDhm5UyIecJNLHU8AVxbWweC/QUF2HlcdluaVuHoClgNRWSlIw2SEZAG3hl8E2LGlcZrIRv51w9SkN4uumEtKVmeaF8VKu7Uadqh3fbmgoMuHLwKfxX9PG03b2DeWHRHfQjmhNZTzyNjbsKFVVQgtEn8lZX8+FquWHJLFS3VxGElxm8ze9JPZKxRf9x1tJ59XEbyL8Ng1r3THxY2pXs73RhnFwFl+ceZjVTFMGPA2GdoE5ky/h5936FSPeX4OFVIucXDTCtgVNG+1TRsTz9I8/k/sPj2eVgcgC6LF8P/skdoNREYtp1oUkwESxm9hW2KSI2nE6QcbSjkwusC7aoPs6wlqqmhSwztoeI5KgiTEyY3qywlB/mGJAzt93KeadPW3ziOFELAmhiCdWjh7O7hCvWDAR7XcWwBvlzflVlSySXzDuq8KQyPJBtN4U4H+YIBnlGxHn1WjXmsrPLs2uZ5BDvmjh+z9wMQorYf6tRFsPKKw+44rekwmyt2WEOqxJWebg3PuR+4NOn/JZz02vIy65RiJ9SCJLkJIduKUvXp2ksR6mtm7ks9UARtj0ffrMiXTh2njQ1xAL0WTgKXRMkJkZvBKBftCP3Rk4vALzPY8xbdIu4uS/Uj30OcfnkvG8f/UPr7/yHmm1rfmz3j0kZLm+loKXzca6mUndrNtqWLibKKgRe7waBy9aGiSdkQzrzHdwA88WAYSRlq2bvKzl+vPIBMwulQIFaAUbMcBzSHltO4exylWOvylRW8HXlA89NPlcSiFp38eV9HsvuRMvi+7OJTAoA1GFYb1YGOUGMslAkFSPz+OvsHBrNkH73I6KAAtNH9mafBCnF+7YIVyKRQ/ymyBuvUG43ypeq54lJJ8/7Lw1QUr9qLW3fHdLqP+QXJwVoMPGVVWFa01CZP8PiV45PvbNTOhX10kfFamYkkfFeJw2c78BIPb6zXdKcXTwsAgJyDTQLkP5h2f2FOFfuqdRgLzsMdeMQ/UGQfSo2RN/JpRqusaayfAya+Z4ucRE+CrK1kR0B1hhfap9Vwxy", "iter": 200000};
+const BLOB = {"salt": "JBX59wC/6kd/2J/JR8g6SQ==", "iv": "l8iDVBawD4hLQlEw", "ct": "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", "iter": 200000};
 const S = { salt: b64d(BLOB.salt), iv: b64d(BLOB.iv), ct: b64d(BLOB.ct), iter: BLOB.iter };
 let DATA = null;
 let CFG = null, CFG_SHA = null, REPO = "", BRANCH = "main";
@@ -139,14 +143,39 @@ async function unlock(pw){
 }
 
 /* ---------------- GitHub API (device management) ---------------- */
-function ghToken(){ return localStorage.getItem("np_gh_token") || ""; }
+function ghToken(){ return (localStorage.getItem("np_gh_token") || "").trim(); }
+
+async function ghFetch(url, opts){
+  const r = await fetch(url, Object.assign({
+    headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json" }
+  }, opts || {}));
+  return r;
+}
+
+async function ghExplainError(r){
+  let msg = "";
+  try { msg = (await r.json()).message || ""; } catch (e) {}
+  if (r.status === 401) return "Token rejected (401). " + (msg || "The token is wrong, expired, or was never saved.");
+  if (r.status === 403) return "Token lacks permission (403). " + (msg || "For a fine-grained token set Contents: Read and write and select the netpulse repository.");
+  if (r.status === 404) return "Not found (404). " + (msg || "The token probably cannot see this repository - check that netpulse is selected under Repository access.");
+  return "GitHub error " + r.status + ": " + msg;
+}
+
+async function ghTestToken(){
+  if (!ghToken()) return "No token saved yet.";
+  const r = await ghFetch("https://api.github.com/user");
+  if (!r.ok) return await ghExplainError(r);
+  const who = (await r.json()).login;
+  const repo = await ghFetch(`https://api.github.com/repos/${REPO}`);
+  if (!repo.ok) return "Signed in as " + who + ", but " + (await ghExplainError(repo));
+  const j = await repo.json();
+  return "OK - signed in as " + who + "; can see " + j.full_name +
+         (j.permissions && j.permissions.push ? " (write access)" : " (read only - cannot add devices)");
+}
 
 async function ghGetConfig(){
-  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json?ref=${BRANCH}`, {
-    headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json" }
-  });
-  if (r.status === 401 || r.status === 403) throw new Error("GitHub token invalid or expired");
-  if (!r.ok) throw new Error("GitHub error " + r.status);
+  const r = await ghFetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json?ref=${BRANCH}`);
+  if (!r.ok) throw new Error(await ghExplainError(r));
   const j = await r.json();
   CFG_SHA = j.sha;
   CFG = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g, "")))));
@@ -160,16 +189,13 @@ async function ghSaveConfig(message){
     sha: CFG_SHA,
     branch: BRANCH,
   };
-  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json`, {
+  const r = await ghFetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json`, {
     method: "PUT",
     headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json",
                "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error("GitHub save failed (" + r.status + "): " + t.slice(0, 140));
-  }
+  if (!r.ok) throw new Error(await ghExplainError(r));
   const j = await r.json();
   CFG_SHA = j.content && j.content.sha ? j.content.sha : CFG_SHA;
 }
@@ -218,14 +244,32 @@ function render(d){
 async function addDevice(){
   const err = document.getElementById("d-err");
   err.textContent = "";
-  const name = document.getElementById("d-name").value.trim();
-  const host = document.getElementById("d-host").value.trim();
+  let name = document.getElementById("d-name").value.trim();
+  let host = document.getElementById("d-host").value.trim();
   const type = document.getElementById("d-type").value;
   const group = document.getElementById("d-group").value;
   if (!name || !host) { err.textContent = "Name and host are required."; return; }
+
+  // Accept "host:port" in the host box and turn it into a TCP check.
+  let effectiveType = type;
   const params = {};
-  if (type === "tcp") params.port = Number(document.getElementById("d-port").value || 443);
-  if (type === "http") params.url = document.getElementById("d-url").value.trim();
+  const m = host.match(/^(.+?):(\d{1,5})$/);
+  if (m) {
+    host = m[1];
+    params.port = Number(m[2]);
+    effectiveType = "tcp";
+  }
+  if (effectiveType === "tcp" && !params.port) {
+    params.port = Number(document.getElementById("d-port").value || 443);
+  }
+  if (effectiveType === "http") {
+    params.url = document.getElementById("d-url").value.trim() || ("https://" + host + "/");
+  }
+  if (/^(10\.|192\.168\.|127\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) {
+    err.textContent = "That is a private address - GitHub runners cannot reach it.";
+    return;
+  }
+
   try {
     await ghGetConfig();
     CFG.devices = CFG.devices || [];
@@ -234,11 +278,13 @@ async function addDevice(){
       return;
     }
     CFG.devices.push({ name, host, alert_group: group, timeout_seconds: 5,
-                       checks: [{ type, params }] });
+                       checks: [{ type: effectiveType, params }] });
     await ghSaveConfig("feat(cloud): add device " + name);
     document.getElementById("mgmt-form").style.display = "none";
     err.textContent = "";
-    alert("Saved. It will start being checked within ~15 minutes.");
+    alert("Saved as a " + effectiveType.toUpperCase() + " check on " + host +
+          (params.port ? ":" + params.port : "") +
+          ".\nIt starts being checked within ~15 minutes.");
   } catch (e) { err.textContent = e.message; }
 }
 
@@ -254,11 +300,25 @@ async function removeDevice(name){
   } catch (e) { alert(e.message); }
 }
 
-function setToken(){
-  const t = prompt("Paste a GitHub token with Contents read+write on\n" + REPO + "\n\n(it is stored only in this browser)");
+async function setToken(){
+  const cur = ghToken();
+  const t = prompt(
+    "Paste a GitHub token with Contents: Read and write on " + REPO + "\n\n" +
+    "Create one at: github.com/settings/personal-access-tokens/new\n" +
+    "  Repository access -> Only select repositories -> " + REPO + "\n" +
+    "  Permissions -> Contents -> Read and write\n\n" +
+    "(stored only in this browser; leave empty to remove)",
+    cur ? "(a token is already saved - paste a new one to replace)" : ""
+  );
   if (t === null) return;
-  if (!t.trim()) { localStorage.removeItem("np_gh_token"); }
-  else { localStorage.setItem("np_gh_token", t.trim()); }
+  const v = t.trim();
+  if (!v || v.startsWith("(")) { if (cur) localStorage.setItem("np_gh_token", cur); return; }
+  localStorage.setItem("np_gh_token", v);
+  const err = document.getElementById("d-err");
+  err.textContent = "Testing token...";
+  const res = await ghTestToken();
+  err.textContent = res;
+  err.className = res.startsWith("OK") ? "ok" : "err";
   render(DATA);
 }
 
@@ -294,6 +354,12 @@ document.getElementById("d-cancel").addEventListener("click", () => {
 });
 document.getElementById("d-save").addEventListener("click", addDevice);
 document.getElementById("d-token-btn").addEventListener("click", setToken);
+document.getElementById("d-test-btn").addEventListener("click", async () => {
+  const m = document.getElementById("d-token-msg");
+  m.textContent = "Testing..."; m.className = "err";
+  const res = await ghTestToken();
+  m.textContent = res; m.className = res.startsWith("OK") ? "ok" : "err";
+});
 document.getElementById("d-type").addEventListener("change", onTypeChange);
 
 (async () => {

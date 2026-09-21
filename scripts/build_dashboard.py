@@ -203,10 +203,14 @@ TEMPLATE = """<!DOCTYPE html>
       <div class="row" id="mgmt-actions">
         <button id="d-new">+ Add device</button>
         <button class="ghost" id="d-token-btn">Set GitHub token</button>
+        <button class="ghost" id="d-test-btn">Test token</button>
       </div>
+      <div class="err" id="d-token-msg"></div>
       <div class="foot" style="text-align:left">
         Changes are saved to <code>cloud/config.json</code> on GitHub and take effect
-        on the next scheduled check (within ~15 minutes).
+        on the next scheduled check (within ~15 minutes).<br>
+        Tip: you can type <code>host:port</code> in the Host box (e.g. <code>103.112.55.209:8002</code>)
+        and it is saved as a TCP check automatically.
       </div>
     </div>
 
@@ -236,14 +240,39 @@ async function unlock(pw){
 }
 
 /* ---------------- GitHub API (device management) ---------------- */
-function ghToken(){ return localStorage.getItem("np_gh_token") || ""; }
+function ghToken(){ return (localStorage.getItem("np_gh_token") || "").trim(); }
+
+async function ghFetch(url, opts){
+  const r = await fetch(url, Object.assign({
+    headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json" }
+  }, opts || {}));
+  return r;
+}
+
+async function ghExplainError(r){
+  let msg = "";
+  try { msg = (await r.json()).message || ""; } catch (e) {}
+  if (r.status === 401) return "Token rejected (401). " + (msg || "The token is wrong, expired, or was never saved.");
+  if (r.status === 403) return "Token lacks permission (403). " + (msg || "For a fine-grained token set Contents: Read and write and select the netpulse repository.");
+  if (r.status === 404) return "Not found (404). " + (msg || "The token probably cannot see this repository - check that netpulse is selected under Repository access.");
+  return "GitHub error " + r.status + ": " + msg;
+}
+
+async function ghTestToken(){
+  if (!ghToken()) return "No token saved yet.";
+  const r = await ghFetch("https://api.github.com/user");
+  if (!r.ok) return await ghExplainError(r);
+  const who = (await r.json()).login;
+  const repo = await ghFetch(`https://api.github.com/repos/${REPO}`);
+  if (!repo.ok) return "Signed in as " + who + ", but " + (await ghExplainError(repo));
+  const j = await repo.json();
+  return "OK - signed in as " + who + "; can see " + j.full_name +
+         (j.permissions && j.permissions.push ? " (write access)" : " (read only - cannot add devices)");
+}
 
 async function ghGetConfig(){
-  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json?ref=${BRANCH}`, {
-    headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json" }
-  });
-  if (r.status === 401 || r.status === 403) throw new Error("GitHub token invalid or expired");
-  if (!r.ok) throw new Error("GitHub error " + r.status);
+  const r = await ghFetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json?ref=${BRANCH}`);
+  if (!r.ok) throw new Error(await ghExplainError(r));
   const j = await r.json();
   CFG_SHA = j.sha;
   CFG = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\\n/g, "")))));
@@ -257,16 +286,13 @@ async function ghSaveConfig(message){
     sha: CFG_SHA,
     branch: BRANCH,
   };
-  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json`, {
+  const r = await ghFetch(`https://api.github.com/repos/${REPO}/contents/cloud/config.json`, {
     method: "PUT",
     headers: { Authorization: "Bearer " + ghToken(), Accept: "application/vnd.github+json",
                "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error("GitHub save failed (" + r.status + "): " + t.slice(0, 140));
-  }
+  if (!r.ok) throw new Error(await ghExplainError(r));
   const j = await r.json();
   CFG_SHA = j.content && j.content.sha ? j.content.sha : CFG_SHA;
 }
@@ -315,14 +341,32 @@ function render(d){
 async function addDevice(){
   const err = document.getElementById("d-err");
   err.textContent = "";
-  const name = document.getElementById("d-name").value.trim();
-  const host = document.getElementById("d-host").value.trim();
+  let name = document.getElementById("d-name").value.trim();
+  let host = document.getElementById("d-host").value.trim();
   const type = document.getElementById("d-type").value;
   const group = document.getElementById("d-group").value;
   if (!name || !host) { err.textContent = "Name and host are required."; return; }
+
+  // Accept "host:port" in the host box and turn it into a TCP check.
+  let effectiveType = type;
   const params = {};
-  if (type === "tcp") params.port = Number(document.getElementById("d-port").value || 443);
-  if (type === "http") params.url = document.getElementById("d-url").value.trim();
+  const m = host.match(/^(.+?):(\\d{1,5})$/);
+  if (m) {
+    host = m[1];
+    params.port = Number(m[2]);
+    effectiveType = "tcp";
+  }
+  if (effectiveType === "tcp" && !params.port) {
+    params.port = Number(document.getElementById("d-port").value || 443);
+  }
+  if (effectiveType === "http") {
+    params.url = document.getElementById("d-url").value.trim() || ("https://" + host + "/");
+  }
+  if (/^(10\\.|192\\.168\\.|127\\.|172\\.(1[6-9]|2\\d|3[01])\\.)/.test(host)) {
+    err.textContent = "That is a private address - GitHub runners cannot reach it.";
+    return;
+  }
+
   try {
     await ghGetConfig();
     CFG.devices = CFG.devices || [];
@@ -331,11 +375,13 @@ async function addDevice(){
       return;
     }
     CFG.devices.push({ name, host, alert_group: group, timeout_seconds: 5,
-                       checks: [{ type, params }] });
+                       checks: [{ type: effectiveType, params }] });
     await ghSaveConfig("feat(cloud): add device " + name);
     document.getElementById("mgmt-form").style.display = "none";
     err.textContent = "";
-    alert("Saved. It will start being checked within ~15 minutes.");
+    alert("Saved as a " + effectiveType.toUpperCase() + " check on " + host +
+          (params.port ? ":" + params.port : "") +
+          ".\\nIt starts being checked within ~15 minutes.");
   } catch (e) { err.textContent = e.message; }
 }
 
@@ -351,11 +397,25 @@ async function removeDevice(name){
   } catch (e) { alert(e.message); }
 }
 
-function setToken(){
-  const t = prompt("Paste a GitHub token with Contents read+write on\\n" + REPO + "\\n\\n(it is stored only in this browser)");
+async function setToken(){
+  const cur = ghToken();
+  const t = prompt(
+    "Paste a GitHub token with Contents: Read and write on " + REPO + "\\n\\n" +
+    "Create one at: github.com/settings/personal-access-tokens/new\\n" +
+    "  Repository access -> Only select repositories -> " + REPO + "\\n" +
+    "  Permissions -> Contents -> Read and write\\n\\n" +
+    "(stored only in this browser; leave empty to remove)",
+    cur ? "(a token is already saved - paste a new one to replace)" : ""
+  );
   if (t === null) return;
-  if (!t.trim()) { localStorage.removeItem("np_gh_token"); }
-  else { localStorage.setItem("np_gh_token", t.trim()); }
+  const v = t.trim();
+  if (!v || v.startsWith("(")) { if (cur) localStorage.setItem("np_gh_token", cur); return; }
+  localStorage.setItem("np_gh_token", v);
+  const err = document.getElementById("d-err");
+  err.textContent = "Testing token...";
+  const res = await ghTestToken();
+  err.textContent = res;
+  err.className = res.startsWith("OK") ? "ok" : "err";
   render(DATA);
 }
 
@@ -391,6 +451,12 @@ document.getElementById("d-cancel").addEventListener("click", () => {
 });
 document.getElementById("d-save").addEventListener("click", addDevice);
 document.getElementById("d-token-btn").addEventListener("click", setToken);
+document.getElementById("d-test-btn").addEventListener("click", async () => {
+  const m = document.getElementById("d-token-msg");
+  m.textContent = "Testing..."; m.className = "err";
+  const res = await ghTestToken();
+  m.textContent = res; m.className = res.startsWith("OK") ? "ok" : "err";
+});
 document.getElementById("d-type").addEventListener("change", onTypeChange);
 
 (async () => {
