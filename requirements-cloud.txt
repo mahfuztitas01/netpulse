@@ -1,0 +1,4 @@
+# Minimal dependency set for the GitHub Actions monitor job.
+# Kept tiny on purpose: the workflow runs every few minutes and runner time is
+# metered (2,000 min/month on a private repo, unlimited on a public one).
+httpx>=0.27
