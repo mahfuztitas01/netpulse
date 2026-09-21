@@ -1,18 +1,18 @@
 {
   "devices": {
     "Cloudflare DNS": {
-      "latency_ms": 9.19,
+      "latency_ms": 8.92,
       "status": "up"
     },
     "Example HTTPS": {
-      "latency_ms": 99.12,
+      "latency_ms": 92.35,
       "status": "up"
     },
     "Google DNS": {
-      "latency_ms": 3.28,
+      "latency_ms": 3.88,
       "status": "up"
     }
   },
   "last_digest": "2026-09-21T09:57:59+00:00",
-  "updated_at": "2026-09-21T10:22:27+00:00"
+  "updated_at": "2026-09-21T10:25:10+00:00"
 }
