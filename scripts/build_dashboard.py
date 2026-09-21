@@ -204,6 +204,7 @@ TEMPLATE = """<!DOCTYPE html>
         <button id="d-new">+ Add device</button>
         <button class="ghost" id="d-token-btn">Set GitHub token</button>
         <button class="ghost" id="d-test-btn">Test token</button>
+        <button class="ghost" id="d-clear-btn">Clear token</button>
       </div>
       <div class="err" id="d-token-msg"></div>
       <div class="foot" style="text-align:left">
@@ -259,14 +260,19 @@ async function ghExplainError(r){
 }
 
 async function ghTestToken(){
-  if (!ghToken()) return "No token saved yet.";
+  const t = ghToken();
+  if (!t) return "No token saved yet.";
+  const info = "[token: " + (t.length) + " chars, starts '" + t.slice(0, 11) + "...'] ";
+  if (!/^(github_pat_|ghp_|gho_|ghs_|ghu_)/.test(t)) {
+    return info + "That does not look like a GitHub token - it should start with github_pat_ or ghp_.";
+  }
   const r = await ghFetch("https://api.github.com/user");
-  if (!r.ok) return await ghExplainError(r);
+  if (!r.ok) return info + await ghExplainError(r);
   const who = (await r.json()).login;
   const repo = await ghFetch(`https://api.github.com/repos/${REPO}`);
-  if (!repo.ok) return "Signed in as " + who + ", but " + (await ghExplainError(repo));
+  if (!repo.ok) return info + "Signed in as " + who + ", but " + (await ghExplainError(repo));
   const j = await repo.json();
-  return "OK - signed in as " + who + "; can see " + j.full_name +
+  return info + "OK - signed in as " + who + "; " + j.full_name +
          (j.permissions && j.permissions.push ? " (write access)" : " (read only - cannot add devices)");
 }
 
@@ -451,6 +457,13 @@ document.getElementById("d-cancel").addEventListener("click", () => {
 });
 document.getElementById("d-save").addEventListener("click", addDevice);
 document.getElementById("d-token-btn").addEventListener("click", setToken);
+document.getElementById("d-clear-btn").addEventListener("click", () => {
+  localStorage.removeItem("np_gh_token");
+  const m = document.getElementById("d-token-msg");
+  m.textContent = "Token cleared. Tap 'Set GitHub token' to add a new one.";
+  m.className = "ok";
+  render(DATA);
+});
 document.getElementById("d-test-btn").addEventListener("click", async () => {
   const m = document.getElementById("d-token-msg");
   m.textContent = "Testing..."; m.className = "err";
