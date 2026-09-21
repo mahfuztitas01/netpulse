@@ -46,6 +46,7 @@ jobs:
       - name: Build the static dashboard
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          DASHBOARD_GH_TOKEN: ${{ secrets.DASHBOARD_GH_TOKEN }}
         run: python scripts/build_dashboard.py docs
 
       - name: Publish dashboard to GitHub Pages

@@ -83,6 +83,10 @@ def build_payload() -> dict:
         "config": config,
         "repo": REPO,
         "branch": BRANCH,
+        # GitHub token for device management, shipped INSIDE the encrypted
+        # payload so the operator never has to paste it by hand. It is only
+        # readable after the dashboard password decrypts this blob.
+        "gh_token": (os.environ.get("DASHBOARD_GH_TOKEN") or "").strip(),
     }
 
 
@@ -240,7 +244,15 @@ async function unlock(pw){
 }
 
 /* ---------------- GitHub API (device management) ---------------- */
-function ghToken(){ return (localStorage.getItem("np_gh_token") || "").trim(); }
+/* The token arrives inside the encrypted payload, so no manual entry is
+   needed. A value typed into localStorage still wins, which lets you
+   override it without rebuilding the page. */
+let EMBEDDED_TOKEN = "";
+
+function ghToken(){
+  const manual = (localStorage.getItem("np_gh_token") || "").trim();
+  return manual || EMBEDDED_TOKEN;
+}
 
 async function ghFetch(url, opts){
   const r = await fetch(url, Object.assign({
@@ -305,6 +317,7 @@ async function ghSaveConfig(message){
 /* ---------------- rendering ---------------- */
 function render(d){
   DATA = d; REPO = d.repo || ""; BRANCH = d.branch || "main";
+  EMBEDDED_TOKEN = (d.gh_token || "").trim();
   document.getElementById("gate").style.display = "none";
   document.getElementById("app").style.display = "block";
   document.getElementById("sub").textContent =
@@ -337,9 +350,9 @@ function render(d){
 
   const has = !!ghToken();
   document.getElementById("mgmt-state").innerHTML = has
-    ? '<span class="ok">GitHub token saved — you can add/remove devices.</span>'
-    : 'To add devices here, tap <b>Set GitHub token</b> once (a fine-grained token with <code>Contents: read and write</code> on <code>' + esc(d.repo) + '</code>).';
-  document.getElementById("mgmt-actions").style.display = has ? "flex" : "flex";
+    ? '<span class="ok">Device management is ready — add or remove devices below.</span>'
+    : 'Device management needs a GitHub token. Tap <b>Set GitHub token</b> once to provide one.';
+  document.getElementById("mgmt-actions").style.display = "flex";
 }
 
 /* ---------------- device actions ---------------- */
