@@ -15,7 +15,7 @@
       "name": "Cloudflare DNS",
       "host": "1.1.1.1",
       "alert_group": "default",
-      "timeout_seconds": 5,
+      "timeout_seconds": 3.0,
       "checks": [
         {
           "type": "ping",
@@ -27,12 +27,13 @@
       "name": "Example HTTPS",
       "host": "example.com",
       "alert_group": "default",
-      "timeout_seconds": 5,
+      "timeout_seconds": 3.0,
       "checks": [
         {
           "type": "http",
           "params": {
-            "url": "https://example.com/"
+            "url": "https://example.com/",
+            "expect_status": 200
           }
         }
       ]
@@ -41,7 +42,7 @@
       "name": "Google DNS",
       "host": "8.8.8.8",
       "alert_group": "default",
-      "timeout_seconds": 5,
+      "timeout_seconds": 3.0,
       "checks": [
         {
           "type": "ping",
@@ -53,12 +54,68 @@
       "name": "MikroTik-2",
       "host": "103.112.55.209",
       "alert_group": "uid5001",
-      "timeout_seconds": 5,
+      "timeout_seconds": 3.0,
       "checks": [
         {
           "type": "tcp",
           "params": {
             "port": 8002
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mikrotik-3",
+      "host": "103.112.55.209",
+      "alert_group": "uid5001",
+      "timeout_seconds": 3.0,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 8003
+          }
+        }
+      ]
+    },
+    {
+      "name": "Moriom Cement Factory MikroTik-1",
+      "host": "103.112.55.209",
+      "alert_group": "uid5001",
+      "timeout_seconds": 3.0,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 16521
+          }
+        }
+      ]
+    },
+    {
+      "name": "SW NETGEAR GS110TP",
+      "host": "103.112.55.209",
+      "alert_group": "uid5001",
+      "timeout_seconds": 3.0,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 7967
+          }
+        }
+      ]
+    },
+    {
+      "name": "VSOL-EPON-OLT V1.3.4",
+      "host": "103.112.55.209",
+      "alert_group": "uid5001",
+      "timeout_seconds": 3.0,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 7966
           }
         }
       ]
