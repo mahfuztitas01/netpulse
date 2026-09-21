@@ -161,7 +161,7 @@ TEMPLATE = """<!DOCTYPE html>
 <body>
 <div class="wrap">
   <div id="gate" class="gate">
-    <h2><span class="dot"></span> NetPulse</h2>
+    <h2><span class="dot"></span> <span id="gate-brand">NetPulse</span></h2>
     <p>Enter the dashboard password to view live status.</p>
     <input id="pw" type="password" autocomplete="current-password" placeholder="Password" />
     <button id="go" style="width:100%;margin-top:10px">Unlock</button>
@@ -169,7 +169,7 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div id="app" style="display:none">
-    <h1><span class="dot"></span> NetPulse</h1>
+    <h1><span class="dot"></span> <span id="brand">NetPulse</span></h1>
     <div class="sub" id="sub"></div>
 
     <div class="cards" id="cards"></div>
@@ -229,6 +229,7 @@ TEMPLATE = """<!DOCTYPE html>
 
 <script>
 const BLOB = __BLOB__;
+const READ_ONLY = __READ_ONLY__;
 const S = { salt: b64d(BLOB.salt), iv: b64d(BLOB.iv), ct: b64d(BLOB.ct), iter: BLOB.iter };
 let DATA = null;
 let CFG = null, CFG_SHA = null, REPO = "", BRANCH = "main";
@@ -323,6 +324,7 @@ async function ghSaveConfig(message){
 function render(d){
   DATA = d; REPO = d.repo || ""; BRANCH = d.branch || "main";
   EMBEDDED_TOKEN = (d.gh_token || "").trim();
+  if (d.brand) document.getElementById("brand").textContent = d.brand;
   document.getElementById("gate").style.display = "none";
   document.getElementById("app").style.display = "block";
   document.getElementById("sub").textContent =
@@ -339,7 +341,7 @@ function render(d){
       <td>${esc(x.group_label || x.group)}</td>
       <td><span class="b ${esc(x.status)}">${esc(String(x.status).toUpperCase())}</span></td>
       <td>${fmtLat(x.latency)}</td>
-      <td><button class="ghost mini" data-del="${esc(x.name)}">✕</button></td>
+      <td>${READ_ONLY ? "" : `<button class="ghost mini" data-del="${esc(x.name)}">✕</button>`}</td>
     </tr>`).join("");
 
   const groups = Object.keys((d.config && d.config.groups) || {});
@@ -349,8 +351,13 @@ function render(d){
   document.getElementById("d-group").innerHTML =
     opts.map(o => `<option value="${esc(o.v)}">${esc(o.t)}</option>`).join("");
 
-  document.getElementById("foot").innerHTML =
-    "Updated automatically by GitHub Actions.<br>Refresh this page for the latest check.";
+  document.getElementById("foot").innerHTML = READ_ONLY
+    ? "Live status, updated automatically.<br>Refresh this page for the latest check."
+    : "Updated automatically by GitHub Actions.<br>Refresh this page for the latest check.";
+
+  // clients get a read-only view: no add/remove panel
+  const panel = document.querySelector(".panel");
+  if (panel) panel.style.display = READ_ONLY ? "none" : "block";
 
   document.querySelectorAll("[data-del]").forEach(b =>
     b.addEventListener("click", () => removeDevice(b.getAttribute("data-del"))));
@@ -520,26 +527,51 @@ document.getElementById("d-type").addEventListener("change", onTypeChange);
 """
 
 
+def write_page(out: Path, payload: dict, password: str, read_only: bool) -> None:
+    blob = encrypt(payload, password) if password else encrypt(
+        {"error": "no password"}, "netpulse-disabled"
+    )
+    html = (TEMPLATE
+            .replace("__BLOB__", json.dumps(blob))
+            .replace("__READ_ONLY__", "true" if read_only else "false"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+
+
 def main() -> int:
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs"
     password = os.environ.get("DASHBOARD_PASSWORD", "").strip()
 
     payload = build_payload()
-
     if password:
-        blob = encrypt(payload, password)
-        print(f"encrypted dashboard ({len(blob['ct'])} b64 chars)")
+        print(f"admin dashboard: {payload['total']} devices")
     else:
-        blob = encrypt({"error": "DASHBOARD_PASSWORD not set"}, "netpulse-disabled")
         print("!! DASHBOARD_PASSWORD not set - publishing a locked placeholder")
 
-    html = TEMPLATE.replace("__BLOB__", json.dumps(blob))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "index.html").write_text(html, encoding="utf-8")
+    write_page(out_dir / "index.html", payload, password, read_only=False)
     (out_dir / ".nojekyll").write_text("", encoding="utf-8")
-
     print(f"wrote {out_dir / 'index.html'}")
-    print(f"  devices: {payload['total']}  up={payload['up']} down={payload['down']}")
+
+    # ---- per-client pages (read-only, one group each)
+    config = read_json(CONFIG_PATH, {})
+    labels = config.get("group_labels") or {}
+    for key in (config.get("groups") or {}):
+        pw = (os.environ.get("CLIENT_PW_" + key.upper()) or "").strip()
+        if not pw:
+            print(f"  client {key}: no password set - skipped")
+            continue
+        mine = [d for d in payload["devices"] if d["group"] == key]
+        sub = dict(payload)
+        sub["devices"] = mine
+        sub["total"] = len(mine)
+        sub["up"] = sum(1 for d in mine if d["status"] == "up")
+        sub["down"] = sum(1 for d in mine if d["status"] == "down")
+        sub["unknown"] = sub["total"] - sub["up"] - sub["down"]
+        sub["brand"] = f"NetPulse — {labels.get(key, key)}"
+        sub.pop("gh_token", None)  # clients must never receive the admin token
+        write_page(out_dir / "client" / f"{key}.html", sub, pw, read_only=True)
+        print(f"  client {key}: {len(mine)} devices -> client/{key}.html")
+
     return 0
 
 

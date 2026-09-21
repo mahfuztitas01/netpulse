@@ -47,6 +47,9 @@ jobs:
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           DASHBOARD_GH_TOKEN: ${{ secrets.DASHBOARD_GH_TOKEN }}
+          CLIENT_PW_UID5001: ${{ secrets.CLIENT_PW_UID5001 }}
+          CLIENT_PW_UID5002: ${{ secrets.CLIENT_PW_UID5002 }}
+          CLIENT_PW_UID5003: ${{ secrets.CLIENT_PW_UID5003 }}
         run: python scripts/build_dashboard.py docs
 
       - name: Publish dashboard to GitHub Pages
