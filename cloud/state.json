@@ -2,18 +2,18 @@
   "_comment": "Runtime state for the GitHub Actions monitor. The workflow updates this file; do not edit by hand.",
   "devices": {
     "Cloudflare DNS": {
-      "latency_ms": 18.47,
+      "latency_ms": 3.09,
       "status": "up"
     },
     "Example HTTPS": {
-      "latency_ms": 156.53,
+      "latency_ms": 104.55,
       "status": "up"
     },
     "Google DNS": {
-      "latency_ms": 11.93,
+      "latency_ms": 2.42,
       "status": "up"
     }
   },
   "last_digest": "2026-09-21T04:41:14+00:00",
-  "updated_at": "2026-09-21T04:41:14+00:00"
+  "updated_at": "2026-09-21T04:56:32+00:00"
 }
