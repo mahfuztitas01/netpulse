@@ -16,7 +16,7 @@ from .config import settings
 _connect_args = {"check_same_thread": False} if settings.is_sqlite else {}
 
 engine = create_async_engine(
-    settings.database_url,
+    settings.database_url_async,
     echo=False,
     future=True,
     pool_pre_ping=not settings.is_sqlite,

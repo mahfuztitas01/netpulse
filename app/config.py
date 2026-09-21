@@ -82,6 +82,36 @@ class Settings(BaseSettings):
         return self.database_url.startswith("sqlite")
 
     @property
+    def database_url_async(self) -> str:
+        """Normalise the configured URL into the form the async engine needs.
+
+        Managed Postgres providers (Neon, Supabase, Render) hand out
+        ``postgresql://...?sslmode=require``, but the asyncpg driver expects
+        ``postgresql+asyncpg://...?ssl=require``. This translates both the
+        scheme and the libpq-only query parameters.
+        """
+        from sqlalchemy.engine import make_url
+
+        raw = (self.database_url or "").strip()
+        if raw.startswith("postgres://"):
+            raw = "postgresql://" + raw[len("postgres://"):]
+        try:
+            url = make_url(raw)
+        except Exception:
+            return raw
+
+        if url.drivername in ("postgres", "postgresql"):
+            url = url.set(drivername="postgresql+asyncpg")
+        if url.drivername.endswith("+asyncpg"):
+            query = dict(url.query)
+            sslmode = query.pop("sslmode", None)
+            query.pop("channel_binding", None)
+            if sslmode and "ssl" not in query:
+                query["ssl"] = "require" if sslmode in ("require", "verify-ca", "verify-full") else sslmode
+            url = url.set(query=query)
+        return url.render_as_string(hide_password=False)
+
+    @property
     def allow_cidrs(self) -> list[str]:
         return [c.strip() for c in self.dashboard_allow_cidrs.split(",") if c.strip()]
 
