@@ -63,8 +63,10 @@ jobs:
           cd "$RUNNER_TEMP"
           git clone --depth 1 \
             "https://x-access-token:${LINK_TOKEN}@github.com/mahfuztitas01/netpulse-link.git" link
-          cp "$GITHUB_WORKSPACE/docs/index.html" link/index.html
-          cp "$GITHUB_WORKSPACE/docs/.nojekyll" link/.nojekyll
+          # publish the whole docs tree (admin page + per-client pages)
+          rm -f link/index.html link/.nojekyll
+          rm -rf link/client
+          cp -r "$GITHUB_WORKSPACE/docs/." link/
           cd link
           git config user.name  "netpulse-bot"
           git config user.email "netpulse-bot@users.noreply.github.com"
