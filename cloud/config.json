@@ -48,6 +48,20 @@
           "params": {}
         }
       ]
+    },
+    {
+      "name": "MikroTik-2",
+      "host": "103.112.55.209",
+      "alert_group": "client01",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 8002
+          }
+        }
+      ]
     }
   ]
 }
