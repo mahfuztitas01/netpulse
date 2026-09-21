@@ -1,0 +1,81 @@
+{
+  "_comment": "Managed from the NetPulse dashboard. Do not edit by hand.",
+  "default_chat_id": "7516353938",
+  "groups": {
+    "client01": "-5304688578",
+    "client02": "-1003950882653",
+    "client03": "-1003915079958"
+  },
+  "renotify_minutes": 30,
+  "digest_minutes": 60,
+  "latency_threshold_ms": 150,
+  "ping_fallback_tcp": true,
+  "devices": [
+    {
+      "name": "Cloudflare DNS",
+      "host": "1.1.1.1",
+      "alert_group": "default",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "ping",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "name": "Example HTTPS",
+      "host": "example.com",
+      "alert_group": "default",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "http",
+          "params": {
+            "url": "https://example.com/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Google DNS",
+      "host": "8.8.8.8",
+      "alert_group": "default",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "ping",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "name": "MikroTik RT 02",
+      "host": "103.112.55.209",
+      "alert_group": "client02",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 8002
+          }
+        }
+      ]
+    },
+    {
+      "name": "MikroTik RT 03",
+      "host": "103.112.55.209",
+      "alert_group": "client02",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 8003
+          }
+        }
+      ]
+    }
+  ]
+}
