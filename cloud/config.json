@@ -48,20 +48,6 @@
           "params": {}
         }
       ]
-    },
-    {
-      "name": "ALERT-TEST (auto delete)",
-      "host": "192.0.2.1",
-      "alert_group": "client02",
-      "timeout_seconds": 2,
-      "checks": [
-        {
-          "type": "tcp",
-          "params": {
-            "port": 9999
-          }
-        }
-      ]
     }
   ]
 }
