@@ -136,6 +136,7 @@ async function loadDevices() {
       <td>${d.uptime_percent == null ? "—" : d.uptime_percent + "%"}</td>
       <td class="muted">${fmtTime(d.last_checked_at)}</td>
       <td>
+        <button class="ghost small" onclick="openEdit(${d.id})">Edit</button>
         <button class="ghost small" onclick="checkNow(${d.id})">Check</button>
         <button class="danger small" onclick="removeDevice(${d.id}, '${esc(d.name)}')">Delete</button>
       </td>
@@ -422,6 +423,67 @@ function pickChat(id) {
   document.getElementById("tg-chat").value = id;
 }
 
+/* ---------------------------------------------------------------- edit device */
+let editDeviceId = null;
+
+function fillGroupSelect(sel, selected) {
+  sel.innerHTML = `<option value="">— default chat —</option>` +
+    groupsCache.map((g) =>
+      `<option value="${g.id}">${esc(g.name)}${g.telegram_chat_id ? "" : " ⚠ no chat id"}</option>`
+    ).join("");
+  sel.value = selected == null ? "" : String(selected);
+}
+
+async function openEdit(id) {
+  try {
+    await loadGroups();
+    const d = await api(`/api/devices/${id}`);
+    editDeviceId = id;
+    document.getElementById("edit-sub").textContent = `${d.host}${d.vendor ? " · " + d.vendor : ""}`;
+    document.getElementById("e-name").value = d.name;
+    document.getElementById("e-host").value = d.host;
+    document.getElementById("e-interval").value = d.interval_seconds;
+    document.getElementById("e-timeout").value = d.timeout_seconds;
+    document.getElementById("e-threshold").value = d.latency_threshold_ms ?? "";
+    document.getElementById("e-enabled").checked = !!d.enabled;
+    document.getElementById("e-notify").checked = !!d.notify;
+    fillGroupSelect(document.getElementById("e-group"), d.alert_group_id);
+    document.getElementById("edit-error").textContent = "";
+    document.getElementById("edit-modal").classList.add("open");
+  } catch (e) { alert(e.message); }
+}
+
+function closeEditModal() {
+  document.getElementById("edit-modal").classList.remove("open");
+  editDeviceId = null;
+}
+
+async function submitEdit(e) {
+  e.preventDefault();
+  const errBox = document.getElementById("edit-error");
+  errBox.textContent = "";
+  if (editDeviceId == null) return;
+  const gv = document.getElementById("e-group").value;
+  const thr = document.getElementById("e-threshold").value;
+  try {
+    await api(`/api/devices/${editDeviceId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: document.getElementById("e-name").value.trim(),
+        host: document.getElementById("e-host").value.trim(),
+        alert_group_id: gv ? Number(gv) : null,
+        interval_seconds: Number(document.getElementById("e-interval").value || 20),
+        timeout_seconds: Number(document.getElementById("e-timeout").value || 3),
+        latency_threshold_ms: thr === "" ? null : Number(thr),
+        enabled: document.getElementById("e-enabled").checked,
+        notify: document.getElementById("e-notify").checked,
+      }),
+    });
+    closeEditModal();
+    await refresh();
+  } catch (err) { errBox.textContent = err.message; }
+}
+
 /* ---------------------------------------------------------------- alert groups */
 let groupsCache = [];
 
@@ -636,6 +698,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-add").addEventListener("click", openModal);
   document.getElementById("btn-close-modal").addEventListener("click", closeModal);
   document.getElementById("add-form").addEventListener("submit", submitDevice);
+  document.getElementById("edit-form").addEventListener("submit", submitEdit);
+  document.getElementById("btn-close-edit").addEventListener("click", closeEditModal);
   document.getElementById("pw-form").addEventListener("submit", submitPasswordChange);
   document.getElementById("btn-users").addEventListener("click", openUsersModal);
   document.getElementById("btn-close-users").addEventListener("click", closeUsersModal);
