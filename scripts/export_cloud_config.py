@@ -90,6 +90,8 @@ def main() -> int:
         "renotify_minutes": 30,
         "digest_minutes": 60,
         "latency_threshold_ms": 150,
+        # GitHub runners block ICMP, so a failed ping is retried over TCP.
+        "ping_fallback_tcp": True,
         "devices": devices,
     }
 

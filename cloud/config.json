@@ -9,6 +9,7 @@
   "renotify_minutes": 30,
   "digest_minutes": 60,
   "latency_threshold_ms": 150,
+  "ping_fallback_tcp": true,
   "devices": [
     {
       "name": "Cloudflare DNS",

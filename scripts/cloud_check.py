@@ -161,6 +161,23 @@ async def run_check(check: dict, host: str, timeout: float):
     return False, None, f"unsupported check type in cloud: {ctype}"
 
 
+# GitHub-hosted runners block outbound ICMP, so a ping check can never succeed
+# there. When that happens we fall back to a TCP connect on a common port and
+# report the device as reachable if any of them answers.
+FALLBACK_TCP_PORTS = (443, 80, 22, 53)
+
+
+async def ping_with_fallback(host: str, params: dict, timeout: float):
+    ok, latency, error = await check_ping(host, params, timeout)
+    if ok:
+        return ok, latency, error
+    for port in FALLBACK_TCP_PORTS:
+        ok2, lat2, _ = await check_tcp(host, {"port": port}, timeout)
+        if ok2:
+            return True, lat2, ""
+    return False, None, f"{error} (tcp fallback {','.join(map(str, FALLBACK_TCP_PORTS))} also failed)"
+
+
 # ---------------------------------------------------------------- telegram
 async def send(text: str, chat_id: str) -> bool:
     if DRY_RUN:
@@ -202,6 +219,7 @@ async def main() -> int:
     renotify_minutes = int(config.get("renotify_minutes", 30))
     digest_minutes = int(config.get("digest_minutes", 60))
     latency_threshold = config.get("latency_threshold_ms")
+    ping_fallback = bool(config.get("ping_fallback_tcp", True))
 
     if not devices:
         print("cloud/config.json has no devices - nothing to do")
@@ -219,7 +237,14 @@ async def main() -> int:
         host = dev.get("host") or ""
         timeout = float(dev.get("timeout_seconds", 5))
         checks = dev.get("checks") or [{"type": "ping", "params": {}}]
-        results = await asyncio.gather(*(run_check(c, host, timeout) for c in checks))
+
+        async def rc(check: dict):
+            ctype = str(check.get("type", "ping")).lower()
+            if ctype == "ping" and ping_fallback:
+                return await ping_with_fallback(host, check.get("params") or {}, timeout)
+            return await run_check(check, host, timeout)
+
+        results = await asyncio.gather(*(rc(c) for c in checks))
         ok = any(r[0] for r in results)
         lats = [r[1] for r in results if r[0] and r[1] is not None]
         latency = min(lats) if lats else None
