@@ -210,8 +210,7 @@ TEMPLATE = """<!DOCTYPE html>
       <div class="foot" style="text-align:left">
         Changes are saved to <code>cloud/config.json</code> on GitHub and take effect
         on the next scheduled check (within ~15 minutes).<br>
-        Tip: you can type <code>host:port</code> in the Host box (e.g. <code>103.112.55.209:8002</code>)
-        and it is saved as a TCP check automatically.
+        Tip: you can type <code>host:port</code> in the Host box and it is saved as a TCP check automatically.
       </div>
     </div>
 
