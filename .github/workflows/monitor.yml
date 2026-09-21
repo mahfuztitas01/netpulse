@@ -75,12 +75,14 @@ jobs:
 
       - name: Persist state
         run: |
-          if git diff --quiet -- cloud/state.json; then
+          # state.json starts life untracked, so `git diff` alone would report
+          # "no changes" and the file would never be committed. Stage it first.
+          git add -f cloud/state.json
+          if git diff --cached --quiet; then
             echo "state unchanged - nothing to commit"
             exit 0
           fi
           git config user.name  "netpulse-bot"
           git config user.email "netpulse-bot@users.noreply.github.com"
-          git add cloud/state.json
           git commit -m "chore(monitor): update state [skip ci]"
           git push

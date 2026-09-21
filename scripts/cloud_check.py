@@ -273,34 +273,34 @@ async def main() -> int:
             down += 1
             down_names.append(name)
 
-        if status != prev_status and prev_status is not None:
-            if status == "down":
-                entry["last_down"] = iso(now)
-                entry["last_change"] = iso(now)
-                entry["last_alert"] = iso(now)
-                await send(
-                    "🔴 <b>DEVICE DOWN</b>\n"
-                    f"<b>Name:</b> {esc(name)}\n"
-                    f"<b>Host:</b> <code>{esc(host)}</code>\n"
-                    f"<b>Group:</b> {esc(group_name)}\n"
-                    f"<b>Reason:</b> {esc(errors)}\n"
-                    f"<i>via GitHub Actions</i>",
-                    chat_id,
-                )
-            else:
-                down_at = parse_iso(entry.get("last_down"))
-                dtxt = humanize(now - down_at) if down_at else "unknown"
-                entry["last_change"] = iso(now)
-                entry["last_alert"] = iso(now)
-                await send(
-                    "🟢 <b>DEVICE UP</b>\n"
-                    f"<b>Name:</b> {esc(name)}\n"
-                    f"<b>Host:</b> <code>{esc(host)}</code>\n"
-                    f"<b>Group:</b> {esc(group_name)}\n"
-                    f"<b>Downtime:</b> {esc(dtxt)}\n"
-                    f"<i>via GitHub Actions</i>",
-                    chat_id,
-                )
+        if status == "down" and prev_status != "down":
+            # fires on a real transition AND the first time we ever see a device down
+            entry["last_down"] = iso(now)
+            entry["last_change"] = iso(now)
+            entry["last_alert"] = iso(now)
+            await send(
+                "🔴 <b>DEVICE DOWN</b>\n"
+                f"<b>Name:</b> {esc(name)}\n"
+                f"<b>Host:</b> <code>{esc(host)}</code>\n"
+                f"<b>Group:</b> {esc(group_name)}\n"
+                f"<b>Reason:</b> {esc(errors)}\n"
+                f"<i>via GitHub Actions</i>",
+                chat_id,
+            )
+        elif status == "up" and prev_status == "down":
+            down_at = parse_iso(entry.get("last_down"))
+            dtxt = humanize(now - down_at) if down_at else "unknown"
+            entry["last_change"] = iso(now)
+            entry["last_alert"] = iso(now)
+            await send(
+                "🟢 <b>DEVICE UP</b>\n"
+                f"<b>Name:</b> {esc(name)}\n"
+                f"<b>Host:</b> <code>{esc(host)}</code>\n"
+                f"<b>Group:</b> {esc(group_name)}\n"
+                f"<b>Downtime:</b> {esc(dtxt)}\n"
+                f"<i>via GitHub Actions</i>",
+                chat_id,
+            )
         elif status == "down" and prev_status == "down":
             last_alert = parse_iso(entry.get("last_alert"))
             if last_alert is None or (now - last_alert) >= timedelta(minutes=renotify_minutes):
