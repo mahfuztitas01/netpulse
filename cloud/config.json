@@ -15,7 +15,7 @@
       "name": "Cloudflare DNS",
       "host": "1.1.1.1",
       "alert_group": "default",
-      "timeout_seconds": 3.0,
+      "timeout_seconds": 3,
       "checks": [
         {
           "type": "ping",
@@ -27,7 +27,7 @@
       "name": "Example HTTPS",
       "host": "example.com",
       "alert_group": "default",
-      "timeout_seconds": 3.0,
+      "timeout_seconds": 3,
       "checks": [
         {
           "type": "http",
@@ -42,11 +42,25 @@
       "name": "Google DNS",
       "host": "8.8.8.8",
       "alert_group": "default",
-      "timeout_seconds": 3.0,
+      "timeout_seconds": 3,
       "checks": [
         {
           "type": "ping",
           "params": {}
+        }
+      ]
+    },
+    {
+      "name": "MikroTik RT 02",
+      "host": "103.112.55.209",
+      "alert_group": "client02",
+      "timeout_seconds": 5,
+      "checks": [
+        {
+          "type": "tcp",
+          "params": {
+            "port": 8002
+          }
         }
       ]
     }
