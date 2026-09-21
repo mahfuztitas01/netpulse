@@ -12,6 +12,7 @@ The bot token is NEVER written here - it lives in a GitHub Actions secret.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import sqlite3
 import sys
@@ -20,6 +21,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "netpulse.db"
 OUT = ROOT / "cloud" / "config.json"
+
+
+def is_private_host(host: str) -> bool:
+    """True for RFC1918 / loopback / link-local addresses.
+
+    A GitHub Actions runner sits on the public internet, so these can never be
+    reached from there - including them would just produce permanent false
+    DOWN alerts.
+    """
+    h = (host or "").strip().strip("[]")
+    if not h:
+        return False
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return h.lower() in ("localhost",) or h.lower().endswith(".local")
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
 
 
 def main() -> int:
@@ -41,10 +59,14 @@ def main() -> int:
         default_chat = str(row["value"])
 
     devices = []
+    skipped_private: list[str] = []
     for dev in conn.execute(
         "SELECT id, name, host, enabled, timeout_seconds, alert_group_id, notify FROM devices ORDER BY name"
     ):
         if not dev["enabled"]:
+            continue
+        if is_private_host(dev["host"]):
+            skipped_private.append(f"{dev['name']} ({dev['host']})")
             continue
         gname = "default"
         if dev["alert_group_id"]:
@@ -105,6 +127,12 @@ def main() -> int:
     for d in devices:
         kinds = "+".join(c["type"] for c in d["checks"])
         print(f"    {d['name']:26} {d['host']:20} [{kinds}] -> {d['alert_group']}")
+    if skipped_private:
+        print()
+        print(f"  skipped {len(skipped_private)} private host(s) - unreachable from GitHub:")
+        for s in skipped_private:
+            print(f"    {s}")
+        print("    (these still work in the local dashboard; only the cloud job skips them)")
     print()
     print("next: git add cloud/config.json && git commit && git push")
     return 0

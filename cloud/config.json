@@ -49,20 +49,6 @@
           "params": {}
         }
       ]
-    },
-    {
-      "name": "Local Router (TCP 80)",
-      "host": "192.168.1.1",
-      "alert_group": "default",
-      "timeout_seconds": 3.0,
-      "checks": [
-        {
-          "type": "tcp",
-          "params": {
-            "port": 80
-          }
-        }
-      ]
     }
   ]
 }
