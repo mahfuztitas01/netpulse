@@ -1,18 +1,22 @@
 {
   "devices": {
     "Cloudflare DNS": {
-      "latency_ms": 8.92,
+      "latency_ms": 15.95,
       "status": "up"
     },
     "Example HTTPS": {
-      "latency_ms": 92.35,
+      "latency_ms": 94.04,
       "status": "up"
     },
     "Google DNS": {
-      "latency_ms": 3.88,
+      "latency_ms": 12.02,
+      "status": "up"
+    },
+    "MikroTik-2": {
+      "latency_ms": 266.23,
       "status": "up"
     }
   },
   "last_digest": "2026-09-21T09:57:59+00:00",
-  "updated_at": "2026-09-21T10:25:10+00:00"
+  "updated_at": "2026-09-21T10:54:02+00:00"
 }
