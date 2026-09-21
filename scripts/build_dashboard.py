@@ -473,6 +473,17 @@ document.getElementById("d-test-btn").addEventListener("click", async () => {
 document.getElementById("d-type").addEventListener("change", onTypeChange);
 
 (async () => {
+  // One-tap token setup: open .../#token=ghp_xxx and it is stored, then the
+  // hash is removed from the address bar and history.
+  try {
+    const m = (location.hash || "").match(/[#&]token=([^&]+)/);
+    if (m) {
+      localStorage.setItem("np_gh_token", decodeURIComponent(m[1]).trim());
+      history.replaceState(null, "", location.pathname + location.search);
+      alert("GitHub token saved in this browser. You can now add devices.");
+    }
+  } catch (e) {}
+
   const saved = sessionStorage.getItem("np_pw");
   if (saved) { try { render(await unlock(saved)); return; } catch (e) {} }
   document.getElementById("pw").focus();
