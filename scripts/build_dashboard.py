@@ -406,10 +406,17 @@ async function addDevice(){
 async function removeDevice(name){
   if (!confirm('Remove device "' + name + '" from cloud monitoring?')) return;
   try {
-    await ghGetConfig();
-    const before = (CFG.devices || []).length;
-    CFG.devices = (CFG.devices || []).filter(x => (x.name || "") !== name);
-    if (CFG.devices.length === before) { alert("Device not found."); return; }
+    // GitHub's contents API can serve a slightly stale copy right after a
+    // write, so retry the lookup a couple of times before giving up.
+    let found = false;
+    for (let attempt = 0; attempt < 3 && !found; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, 2500));
+      await ghGetConfig();
+      const before = (CFG.devices || []).length;
+      CFG.devices = (CFG.devices || []).filter(x => (x.name || "") !== name);
+      found = CFG.devices.length !== before;
+    }
+    if (!found) { alert("Device not found - refresh the page and try again."); return; }
     await ghSaveConfig("chore(cloud): remove device " + name);
     alert("Removed. Refresh in a moment to see the updated list.");
   } catch (e) { alert(e.message); }
