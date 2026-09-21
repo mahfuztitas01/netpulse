@@ -1,0 +1,56 @@
+name: NetPulse Monitor
+
+# Runs on GitHub's servers, so monitoring + Telegram alerts keep working even
+# when your own PC is switched off.
+#
+# Required secret: TELEGRAM_BOT_TOKEN
+#   GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub's minimum is 5 minutes, but scheduled runs are
+    # queued and often delayed. Shorten to "*/5 * * * *" if you make this repo
+    # public (public repos get unlimited Actions minutes).
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: write # needed to commit cloud/state.json back
+
+concurrency:
+  group: netpulse-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-cloud.txt
+
+      - name: Run one monitoring round
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python scripts/cloud_check.py
+
+      - name: Persist state
+        run: |
+          if git diff --quiet -- cloud/state.json; then
+            echo "state unchanged - nothing to commit"
+            exit 0
+          fi
+          git config user.name  "netpulse-bot"
+          git config user.email "netpulse-bot@users.noreply.github.com"
+          git add cloud/state.json
+          git commit -m "chore(monitor): update state [skip ci]"
+          git push
