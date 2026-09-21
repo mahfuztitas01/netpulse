@@ -1,25 +1,18 @@
 {
   "devices": {
-    "ALERT-TEST (auto delete)": {
-      "last_alert": "2026-09-21T08:52:25+00:00",
-      "last_change": "2026-09-21T08:52:25+00:00",
-      "last_down": "2026-09-21T08:52:25+00:00",
-      "latency_ms": null,
-      "status": "down"
-    },
     "Cloudflare DNS": {
-      "latency_ms": 2.16,
+      "latency_ms": 7.91,
       "status": "up"
     },
     "Example HTTPS": {
-      "latency_ms": 127.65,
+      "latency_ms": 91.22,
       "status": "up"
     },
     "Google DNS": {
-      "latency_ms": 2.76,
+      "latency_ms": 5.38,
       "status": "up"
     }
   },
-  "last_digest": "2026-09-21T08:52:25+00:00",
-  "updated_at": "2026-09-21T08:52:25+00:00"
+  "last_digest": "2026-09-21T09:57:59+00:00",
+  "updated_at": "2026-09-21T09:57:59+00:00"
 }
