@@ -10,12 +10,14 @@ name: NetPulse Monitor (30s)
 # false), so the moment the long runner exits the next one starts and the loop
 # never stops.
 #
-# Required secret: TELEGRAM_BOT_TOKEN
-#   GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret
+# Required secrets:
+#   TELEGRAM_BOT_TOKEN      bot token from @BotFather
+#   NETPULSE_CONFIG_JSON    the contents of cloud/config.json (device list)
 #
 # NOTE: this job is only free because the repository is public (GitHub gives
 # unlimited Actions minutes to public repos; a private repo would burn the
-# 2,000 min/month free allowance in ~2 days).
+# 2,000 min/month free allowance in ~2 days). The device list is therefore
+# injected from a secret and never committed.
 
 on:
   schedule:
@@ -23,7 +25,7 @@ on:
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
 permissions:
-  contents: write # needed to commit cloud/state.json back
+  contents: read
 
 concurrency:
   group: netpulse-monitor
@@ -46,15 +48,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-cloud.txt
 
-      - name: Configure git
+      - name: Write device config from secret
+        env:
+          NETPULSE_CONFIG_JSON: ${{ secrets.NETPULSE_CONFIG_JSON }}
         run: |
-          git config user.name  "netpulse-bot"
-          git config user.email "netpulse-bot@users.noreply.github.com"
+          mkdir -p cloud
+          printf '%s' "$NETPULSE_CONFIG_JSON" > cloud/config.json
+          python -c "import json;d=json.load(open('cloud/config.json'));print('devices:',len(d.get('devices',[])))"
 
       - name: Run 30s monitoring loop
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           LOOP_SECONDS: "19800"
           CHECK_INTERVAL_SECONDS: "30"
-          STATE_COMMIT_SECONDS: "600"
         run: python scripts/cloud_check_loop.py

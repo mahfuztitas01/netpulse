@@ -1,8 +1,9 @@
 name: NetPulse Dashboard
 
-# Builds the static dashboard from cloud/state.json + cloud/config.json and
-# publishes it to the netpulse-link GitHub Pages repo. Kept separate from the
-# monitor loop so the fast 30s loop does not rebuild the site on every tick.
+# Builds the static dashboard from the injected device config + the current
+# monitoring state and publishes it to the netpulse-link GitHub Pages repo.
+# Kept separate from the monitor loop so the fast 30s loop does not rebuild the
+# site on every tick.
 
 on:
   schedule:
@@ -10,7 +11,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: netpulse-dashboard
@@ -32,6 +33,13 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements-cloud.txt
+
+      - name: Write device config from secret
+        env:
+          NETPULSE_CONFIG_JSON: ${{ secrets.NETPULSE_CONFIG_JSON }}
+        run: |
+          mkdir -p cloud
+          printf '%s' "$NETPULSE_CONFIG_JSON" > cloud/config.json
 
       - name: Build the static dashboard
         env:
