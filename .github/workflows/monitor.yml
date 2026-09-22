@@ -1,20 +1,25 @@
-name: NetPulse Monitor
+name: NetPulse Monitor (30s)
 
 # Runs on GitHub's servers, so monitoring + Telegram alerts keep working even
 # when your own PC is switched off.
 #
+# How the 30-second resolution works: GitHub's cron is best-effort and the
+# minimum interval is 5 minutes, so instead of one short run per cron tick we
+# start ONE long-lived runner that loops every 30 seconds for ~5h30m. The
+# `*/5` cron keeps a *pending* run queued (concurrency + cancel-in-progress:
+# false), so the moment the long runner exits the next one starts and the loop
+# never stops.
+#
 # Required secret: TELEGRAM_BOT_TOKEN
 #   GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret
+#
+# NOTE: this job is only free because the repository is public (GitHub gives
+# unlimited Actions minutes to public repos; a private repo would burn the
+# 2,000 min/month free allowance in ~2 days).
 
 on:
   schedule:
-    # GitHub's scheduler is best-effort and often runs late (sometimes hours).
-    # Several entries are registered so at least one is likely to fire near
-    # each slot. For guaranteed timing use an external trigger - see
-    # deploy/GITHUB_ACTIONS_SETUP.md ("Reliable scheduling").
-    - cron: "*/15 * * * *"
-    - cron: "7,22,37,52 * * * *"
-    - cron: "3,18,33,48 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
 permissions:
@@ -25,9 +30,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check:
+  loop:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 355
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,57 +46,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-cloud.txt
 
-      - name: Run one monitoring round
+      - name: Configure git
+        run: |
+          git config user.name  "netpulse-bot"
+          git config user.email "netpulse-bot@users.noreply.github.com"
+
+      - name: Run 30s monitoring loop
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        run: python scripts/cloud_check.py
-
-      - name: Build the static dashboard
-        env:
-          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
-          DASHBOARD_GH_TOKEN: ${{ secrets.DASHBOARD_GH_TOKEN }}
-          CLIENT_PW_UID5001: ${{ secrets.CLIENT_PW_UID5001 }}
-          CLIENT_PW_UID5002: ${{ secrets.CLIENT_PW_UID5002 }}
-          CLIENT_PW_UID5003: ${{ secrets.CLIENT_PW_UID5003 }}
-        run: python scripts/build_dashboard.py docs
-
-      - name: Publish dashboard to GitHub Pages
-        env:
-          LINK_TOKEN: ${{ secrets.LINK_REPO_TOKEN }}
-        run: |
-          if [ -z "$LINK_TOKEN" ]; then
-            echo "LINK_REPO_TOKEN not set - skipping dashboard publish"
-            exit 0
-          fi
-          cd "$RUNNER_TEMP"
-          git clone --depth 1 \
-            "https://x-access-token:${LINK_TOKEN}@github.com/mahfuztitas01/netpulse-link.git" link
-          # publish the whole docs tree (admin page + per-client pages)
-          rm -f link/index.html link/.nojekyll
-          rm -rf link/client
-          cp -r "$GITHUB_WORKSPACE/docs/." link/
-          cd link
-          git config user.name  "netpulse-bot"
-          git config user.email "netpulse-bot@users.noreply.github.com"
-          git add -A
-          if git diff --quiet --cached; then
-            echo "dashboard unchanged"
-          else
-            git commit -m "chore: update NetPulse dashboard [skip ci]"
-            git push
-            echo "dashboard published -> https://mahfuztitas01.github.io/netpulse-link/"
-          fi
-
-      - name: Persist state
-        run: |
-          # state.json starts life untracked, so `git diff` alone would report
-          # "no changes" and the file would never be committed. Stage it first.
-          git add -f cloud/state.json
-          if git diff --cached --quiet; then
-            echo "state unchanged - nothing to commit"
-            exit 0
-          fi
-          git config user.name  "netpulse-bot"
-          git config user.email "netpulse-bot@users.noreply.github.com"
-          git commit -m "chore(monitor): update state [skip ci]"
-          git push
+          LOOP_SECONDS: "19800"
+          CHECK_INTERVAL_SECONDS: "30"
+          STATE_COMMIT_SECONDS: "600"
+        run: python scripts/cloud_check_loop.py

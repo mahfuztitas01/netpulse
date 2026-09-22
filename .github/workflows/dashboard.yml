@@ -1,0 +1,69 @@
+name: NetPulse Dashboard
+
+# Builds the static dashboard from cloud/state.json + cloud/config.json and
+# publishes it to the netpulse-link GitHub Pages repo. Kept separate from the
+# monitor loop so the fast 30s loop does not rebuild the site on every tick.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: netpulse-dashboard
+  cancel-in-progress: true
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-cloud.txt
+
+      - name: Build the static dashboard
+        env:
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          DASHBOARD_GH_TOKEN: ${{ secrets.DASHBOARD_GH_TOKEN }}
+          CLIENT_PW_UID5001: ${{ secrets.CLIENT_PW_UID5001 }}
+          CLIENT_PW_UID5002: ${{ secrets.CLIENT_PW_UID5002 }}
+          CLIENT_PW_UID5003: ${{ secrets.CLIENT_PW_UID5003 }}
+        run: python scripts/build_dashboard.py docs
+
+      - name: Publish dashboard to GitHub Pages
+        env:
+          LINK_TOKEN: ${{ secrets.LINK_REPO_TOKEN }}
+        run: |
+          if [ -z "$LINK_TOKEN" ]; then
+            echo "LINK_REPO_TOKEN not set - skipping dashboard publish"
+            exit 0
+          fi
+          cd "$RUNNER_TEMP"
+          git clone --depth 1 \
+            "https://x-access-token:${LINK_TOKEN}@github.com/mahfuztitas01/netpulse-link.git" link
+          rm -f link/index.html link/.nojekyll
+          rm -rf link/client
+          cp -r "$GITHUB_WORKSPACE/docs/." link/
+          cd link
+          git config user.name  "netpulse-bot"
+          git config user.email "netpulse-bot@users.noreply.github.com"
+          git add -A
+          if git diff --quiet --cached; then
+            echo "dashboard unchanged"
+          else
+            git commit -m "chore: update NetPulse dashboard [skip ci]"
+            git push
+            echo "dashboard published -> https://mahfuztitas01.github.io/netpulse-link/"
+          fi
