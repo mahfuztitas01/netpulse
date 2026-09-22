@@ -11,7 +11,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: netpulse-dashboard
@@ -80,4 +80,21 @@ jobs:
             git commit -m "chore: update NetPulse dashboard [skip ci]"
             git push
             echo "dashboard published -> https://mahfuztitas01.github.io/netpulse-link/"
+          fi
+
+      - name: Daily heartbeat
+        # GitHub disables scheduled workflows after 60 days without repository
+        # activity. The monitor no longer commits state, so write one tiny file
+        # a day to keep the schedules alive.
+        run: |
+          date -u +%Y-%m-%d > .heartbeat
+          git config user.name  "netpulse-bot"
+          git config user.email "netpulse-bot@users.noreply.github.com"
+          git add .heartbeat
+          if git diff --cached --quiet; then
+            echo "heartbeat unchanged today"
+          else
+            git commit -m "chore: heartbeat [skip ci]"
+            git push
+            echo "heartbeat committed"
           fi
