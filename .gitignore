@@ -24,3 +24,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Cloud runtime data - must NOT be committed (repo is public).
+# The device list is injected at run time from the NETPULSE_CONFIG_JSON secret;
+# state.json and the built dashboard are produced inside the runner.
+cloud/config.json
+cloud/state.json
+docs/
