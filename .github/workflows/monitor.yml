@@ -8,10 +8,13 @@ name: NetPulse Monitor
 
 on:
   schedule:
-    # Every 15 minutes. GitHub's minimum is 5 minutes, but scheduled runs are
-    # queued and often delayed. Shorten to "*/5 * * * *" if you make this repo
-    # public (public repos get unlimited Actions minutes).
+    # GitHub's scheduler is best-effort and often runs late (sometimes hours).
+    # Several entries are registered so at least one is likely to fire near
+    # each slot. For guaranteed timing use an external trigger - see
+    # deploy/GITHUB_ACTIONS_SETUP.md ("Reliable scheduling").
     - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
+    - cron: "3,18,33,48 * * * *"
   workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
 permissions:
