@@ -41,6 +41,12 @@ jobs:
           mkdir -p cloud
           printf '%s' "$NETPULSE_CONFIG_JSON" > cloud/config.json
 
+      - name: Refresh monitoring state (no alerts)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          DRY_RUN: "1"
+        run: python scripts/cloud_check.py
+
       - name: Build the static dashboard
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
