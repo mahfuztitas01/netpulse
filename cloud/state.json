@@ -1,38 +1,44 @@
 {
   "devices": {
     "Cloudflare DNS": {
-      "latency_ms": 2.23,
+      "latency_ms": 2.82,
       "status": "up"
     },
     "Example HTTPS": {
-      "latency_ms": 89.07,
+      "latency_ms": 87.63,
       "status": "up"
     },
     "Google DNS": {
-      "latency_ms": 1.45,
+      "latency_ms": 3.29,
       "status": "up"
     },
     "MikroTik-2": {
-      "latency_ms": 247.37,
-      "status": "up"
+      "last_alert": "2026-09-22T14:04:26+00:00",
+      "last_change": "2026-09-22T14:04:26+00:00",
+      "last_down": "2026-09-22T14:04:26+00:00",
+      "latency_ms": null,
+      "status": "down"
     },
     "Mikrotik-3": {
-      "latency_ms": 240.23,
-      "status": "up"
+      "last_alert": "2026-09-22T14:04:26+00:00",
+      "last_change": "2026-09-22T14:04:26+00:00",
+      "last_down": "2026-09-22T14:04:26+00:00",
+      "latency_ms": null,
+      "status": "down"
     },
     "Moriom Cement Factory MikroTik-1": {
-      "latency_ms": 229.56,
+      "latency_ms": 253.87,
       "status": "up"
     },
     "SW NETGEAR GS110TP": {
-      "latency_ms": 232.89,
+      "latency_ms": 256.61,
       "status": "up"
     },
     "VSOL-EPON-OLT V1.3.4": {
-      "latency_ms": 237.75,
+      "latency_ms": 264.96,
       "status": "up"
     }
   },
-  "last_digest": "2026-09-22T12:48:34+00:00",
-  "updated_at": "2026-09-22T12:48:34+00:00"
+  "last_digest": "2026-09-22T14:04:26+00:00",
+  "updated_at": "2026-09-22T14:04:26+00:00"
 }
