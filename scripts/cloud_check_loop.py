@@ -15,10 +15,12 @@ re-alerts inside a run.
 
 Because GitHub's dashboard cron is equally unreliable, this loop also rebuilds
 and re-publishes the static dashboard every ``DASHBOARD_EVERY_SECONDS`` seconds
-(calling ``scripts/refresh_dashboard.sh``), so the public dashboard stays fresh
-without depending on GitHub's scheduler. Secrets required: ``TELEGRAM_BOT_TOKEN``,
-``NETPULSE_CONFIG_JSON``, ``DASHBOARD_PASSWORD``, ``DASHBOARD_GH_TOKEN``,
-``CLIENT_PW_UID5001..5003`` and ``LINK_REPO_TOKEN``.
+(calling ``scripts/refresh_dashboard.sh``). The rebuild runs in a background
+thread so it never blocks the 30s monitoring cadence, and a new rebuild is not
+started until the previous one finishes (no overlapping git pushes).
+Secrets required: ``TELEGRAM_BOT_TOKEN``, ``NETPULSE_CONFIG_JSON``,
+``DASHBOARD_PASSWORD``, ``DASHBOARD_GH_TOKEN``, ``CLIENT_PW_UID5001..5003`` and
+``LINK_REPO_TOKEN``.
 """
 from __future__ import annotations
 
@@ -40,10 +42,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 LOOP_SECONDS = int(os.environ.get("LOOP_SECONDS", "19800"))
 CHECK_INTERVAL_SECONDS = float(os.environ.get("CHECK_INTERVAL_SECONDS", "30"))
-DASHBOARD_EVERY_SECONDS = float(os.environ.get("DASHBOARD_EVERY_SECONDS", "300"))
-_CLOUD_STATE = os.environ.get(
-    "NETPULSE_STATE_FILE", "cloud/state.json"
-).strip().lower()
+DASHBOARD_EVERY_SECONDS = float(os.environ.get("DASHBOARD_EVERY_SECONDS", "30"))
 
 
 def refresh_dashboard() -> None:
@@ -69,6 +68,7 @@ async def main() -> int:
     start = time.monotonic()
     last_dash = 0.0
     rounds = 0
+    dash_task = None
     while time.monotonic() - start < LOOP_SECONDS:
         round_start = time.monotonic()
         try:
@@ -76,11 +76,18 @@ async def main() -> int:
             rounds += 1
         except Exception as exc:  # noqa: BLE001
             print(f"round error: {exc}")
-        if time.monotonic() - last_dash >= DASHBOARD_EVERY_SECONDS:
-            refresh_dashboard()
+        if dash_task is not None and dash_task.done():
+            dash_task = None
+        if dash_task is None and time.monotonic() - last_dash >= DASHBOARD_EVERY_SECONDS:
             last_dash = time.monotonic()
+            dash_task = asyncio.create_task(asyncio.to_thread(refresh_dashboard))
         spent = time.monotonic() - round_start
         await asyncio.sleep(max(1.0, CHECK_INTERVAL_SECONDS - spent))
+    if dash_task is not None:
+        try:
+            await asyncio.wait_for(dash_task, timeout=240)
+        except Exception:  # noqa: BLE001
+            pass
     print(f"loop done: {rounds} rounds in {time.monotonic() - start:.0f}s")
     return 0
 
