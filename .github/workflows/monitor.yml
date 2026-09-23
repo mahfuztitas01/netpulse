@@ -76,5 +76,8 @@ jobs:
           CLIENT_PW_UID5001: ${{ secrets.CLIENT_PW_UID5001 }}
           CLIENT_PW_UID5002: ${{ secrets.CLIENT_PW_UID5002 }}
           CLIENT_PW_UID5003: ${{ secrets.CLIENT_PW_UID5003 }}
+          CLIENT_USER_UID5001: ${{ secrets.CLIENT_USER_UID5001 }}
+          CLIENT_USER_UID5002: ${{ secrets.CLIENT_USER_UID5002 }}
+          CLIENT_USER_UID5003: ${{ secrets.CLIENT_USER_UID5003 }}
           LINK_REPO_TOKEN: ${{ secrets.LINK_REPO_TOKEN }}
         run: python scripts/cloud_check_loop.py
