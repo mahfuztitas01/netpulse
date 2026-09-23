@@ -162,7 +162,10 @@ TEMPLATE = """<!DOCTYPE html>
 <div class="wrap">
   <div id="gate" class="gate">
     <h2><span class="dot"></span> <span id="gate-brand">NetPulse</span></h2>
-    <p>Enter the dashboard password to view live status.</p>
+    <p>Enter your username and password to view live status.</p>
+    <div id="user-wrap" style="display:none">
+      <input id="user" type="text" autocomplete="username" placeholder="Username" />
+    </div>
     <input id="pw" type="password" autocomplete="current-password" placeholder="Password" />
     <button id="go" style="width:100%;margin-top:10px">Unlock</button>
     <div class="err" id="err"></div>
@@ -230,6 +233,7 @@ TEMPLATE = """<!DOCTYPE html>
 <script>
 const BLOB = __BLOB__;
 const READ_ONLY = __READ_ONLY__;
+const HAS_USER = __HAS_USER__;
 const S = { salt: b64d(BLOB.salt), iv: b64d(BLOB.iv), ct: b64d(BLOB.ct), iter: BLOB.iter };
 let DATA = null;
 let CFG = null, CFG_SHA = null, REPO = "", BRANCH = "main";
@@ -467,11 +471,17 @@ function onTypeChange(){
 
 async function tryUnlock(){
   const pw = document.getElementById("pw").value;
+  const user = document.getElementById("user").value;
   const err = document.getElementById("err");
   const btn = document.getElementById("go");
   err.textContent = ""; btn.disabled = true; btn.textContent = "Checking...";
   try {
     const d = await unlock(pw);
+    if (HAS_USER && user.trim() !== (d.client_user || "")) {
+      err.textContent = "Wrong username or password.";
+      btn.disabled = false; btn.textContent = "Unlock";
+      return;
+    }
     sessionStorage.setItem("np_pw", pw);
     render(d);
   } catch (e) {
@@ -506,6 +516,7 @@ document.getElementById("d-test-btn").addEventListener("click", async () => {
 document.getElementById("d-type").addEventListener("change", onTypeChange);
 
 (async () => {
+  if (HAS_USER) document.getElementById("user-wrap").style.display = "block";
   // One-tap token setup: open .../#token=ghp_xxx and it is stored, then the
   // hash is removed from the address bar and history.
   try {
@@ -531,9 +542,11 @@ def write_page(out: Path, payload: dict, password: str, read_only: bool) -> None
     blob = encrypt(payload, password) if password else encrypt(
         {"error": "no password"}, "netpulse-disabled"
     )
+    has_user = bool((payload.get("client_user") or "").strip())
     html = (TEMPLATE
             .replace("__BLOB__", json.dumps(blob))
-            .replace("__READ_ONLY__", "true" if read_only else "false"))
+            .replace("__READ_ONLY__", "true" if read_only else "false")
+            .replace("__HAS_USER__", "true" if has_user else "false"))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
 
@@ -560,6 +573,7 @@ def main() -> int:
         if not pw:
             print(f"  client {key}: no password set - skipped")
             continue
+        user = (os.environ.get("CLIENT_USER_" + key.upper()) or "").strip()
         mine = [d for d in payload["devices"] if d["group"] == key]
         sub = dict(payload)
         sub["devices"] = mine
@@ -568,6 +582,7 @@ def main() -> int:
         sub["down"] = sum(1 for d in mine if d["status"] == "down")
         sub["unknown"] = sub["total"] - sub["up"] - sub["down"]
         sub["brand"] = f"NetPulse — {labels.get(key, key)}"
+        sub["client_user"] = user
         sub.pop("gh_token", None)  # clients must never receive the admin token
         write_page(out_dir / "client" / f"{key}.html", sub, pw, read_only=True)
         print(f"  client {key}: {len(mine)} devices -> client/{key}.html")
