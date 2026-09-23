@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Build the static dashboard and publish it to netpulse-link.
-# Called periodically by the long-running monitor loop so the dashboard stays
-# fresh even though GitHub's scheduler delays the separate cron workflow.
+# Rebuild the static dashboard and publish it to the netpulse-link repo so the
+# public dashboard stays fresh even though GitHub's own scheduler delays the
+# separate dashboard.yml cron by hours. Called by cloud_check_loop.py every few
+# minutes.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "=== [dashboard] building ==="
-python scripts/build_dashboard.py docs || { echo "build failed"; exit 1; }
+python scripts/build_dashboard.py docs || { echo "dashboard build failed"; exit 1; }
 
 if [ -z "${LINK_REPO_TOKEN:-}" ]; then
   echo "LINK_REPO_TOKEN not set - skipping publish"
   exit 0
 fi
 
-echo "=== [dashboard] publishing ==="
+echo "=== publishing dashboard ==="
 TMP="${RUNNER_TEMP:-/tmp}"
-LINK="$TMP/netpulse-link-pub"
+LINK="$TMP/netpulse-link"
 rm -rf "$LINK"
 git clone --depth 1 "https://x-access-token:${LINK_REPO_TOKEN}@github.com/mahfuztitas01/netpulse-link.git" "$LINK"
 rm -f "$LINK/index.html" "$LINK/.nojekyll"
