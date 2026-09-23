@@ -327,21 +327,21 @@ async def main() -> int:
             g = str(dev.get("alert_group") or "default")
             buckets.setdefault(g, []).append(dev.get("name") or dev.get("host") or "?")
         for group_name, names in buckets.items():
+            g_down = [n for n in names if new_state.get(n, {}).get("status") == "down"]
+            if not g_down:
+                continue  # only summarize groups that have something down
             chat_id = str(groups.get(group_name) or default_chat)
             label = labels.get(group_name) or (
                 "Default" if group_name == "default" else group_name
             )
-            g_up = sum(1 for n in names if new_state.get(n, {}).get("status") == "up")
-            g_down = [n for n in names if new_state.get(n, {}).get("status") == "down"]
-            icon = "🟢" if not g_down else "🔴"
+            g_up = len(names) - len(g_down)
             lines = [
-                f"{icon} <b>NetPulse — {esc(label)}</b>",
+                f"🔴 <b>NetPulse — {esc(label)}</b>",
                 f"Total: <b>{len(names)}</b>   Up: <b>{g_up}</b>   Down: <b>{len(g_down)}</b>",
+                "",
+                "<b>DOWN now:</b>",
             ]
-            if g_down:
-                lines.append("")
-                lines.append("<b>DOWN now:</b>")
-                lines += [f"• {esc(n)}" for n in g_down[:15]]
+            lines += [f"• {esc(n)}" for n in g_down[:15]]
             await send("\n".join(lines), chat_id)
         state["last_digest"] = iso(now)
     else:
