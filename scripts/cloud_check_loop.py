@@ -41,6 +41,9 @@ for _stream in (sys.stdout, sys.stderr):
 LOOP_SECONDS = int(os.environ.get("LOOP_SECONDS", "19800"))
 CHECK_INTERVAL_SECONDS = float(os.environ.get("CHECK_INTERVAL_SECONDS", "30"))
 DASHBOARD_EVERY_SECONDS = float(os.environ.get("DASHBOARD_EVERY_SECONDS", "300"))
+_CLOUD_STATE = os.environ.get(
+    "NETPULSE_STATE_FILE", "cloud/state.json"
+).strip().lower()
 
 
 def refresh_dashboard() -> None:
@@ -58,7 +61,7 @@ def refresh_dashboard() -> None:
         print(f"dashboard refresh error: {exc}")
 
 
-def main() -> int:
+async def main() -> int:
     print(
         f"loop start: {LOOP_SECONDS}s total, {CHECK_INTERVAL_SECONDS}s interval, "
         f"dashboard every {DASHBOARD_EVERY_SECONDS}s"
