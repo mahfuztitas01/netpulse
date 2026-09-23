@@ -10,9 +10,18 @@ name: NetPulse Monitor (30s)
 # false), so the moment the long runner exits the next one starts and the loop
 # never stops.
 #
+# The same loop also rebuilds + republishes the static dashboard on a short
+# interval (DASHBOARD_EVERY_SECONDS) so the public dashboard at
+# https://mahfuztitas01.github.io/netpulse-link/ stays near-real-time instead of
+# waiting on GitHub's unreliable cron.
+#
 # Required secrets:
 #   TELEGRAM_BOT_TOKEN      bot token from @BotFather
 #   NETPULSE_CONFIG_JSON    the contents of cloud/config.json (device list)
+#   DASHBOARD_PASSWORD      password that unlocks the admin dashboard
+#   DASHBOARD_GH_TOKEN      GitHub token for device management (in payload)
+#   CLIENT_PW_UID5001..3    per-client dashboard passwords
+#   LINK_REPO_TOKEN         token that can push to netpulse-link (Pages repo)
 #
 # NOTE: this job is only free because the repository is public (GitHub gives
 # unlimited Actions minutes to public repos; a private repo would burn the
@@ -56,9 +65,16 @@ jobs:
           printf '%s' "$NETPULSE_CONFIG_JSON" > cloud/config.json
           python -c "import json;d=json.load(open('cloud/config.json'));print('devices:',len(d.get('devices',[])))"
 
-      - name: Run 30s monitoring loop
+      - name: Run 30s monitoring loop (alerts + dashboard refresh)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           LOOP_SECONDS: "19800"
           CHECK_INTERVAL_SECONDS: "30"
+          DASHBOARD_EVERY_SECONDS: "30"
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          DASHBOARD_GH_TOKEN: ${{ secrets.DASHBOARD_GH_TOKEN }}
+          CLIENT_PW_UID5001: ${{ secrets.CLIENT_PW_UID5001 }}
+          CLIENT_PW_UID5002: ${{ secrets.CLIENT_PW_UID5002 }}
+          CLIENT_PW_UID5003: ${{ secrets.CLIENT_PW_UID5003 }}
+          LINK_REPO_TOKEN: ${{ secrets.LINK_REPO_TOKEN }}
         run: python scripts/cloud_check_loop.py
