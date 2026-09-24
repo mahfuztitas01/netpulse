@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from .models import CheckType, DeviceStatus, EventSeverity, EventType, SnmpVersion
+from .models import CheckType, DeviceStatus, EventSeverity, EventType, SnmpVersion, UserRole
 
 
 # ---------------------------------------------------------------- auth
@@ -27,6 +27,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
     is_superuser: bool = False
+    role: UserRole = UserRole.viewer
 
 
 class UserUpdate(BaseModel):
@@ -34,6 +35,7 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     is_active: bool | None = None
     is_superuser: bool | None = None
+    role: UserRole | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
@@ -46,6 +48,7 @@ class UserOut(UserBase):
     id: int
     is_active: bool
     is_superuser: bool
+    role: UserRole
     must_change_password: bool = False
     created_at: datetime
 
@@ -97,6 +100,9 @@ class DeviceBase(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     host: str = Field(min_length=1, max_length=255)
     vendor: str | None = None
+    model: str | None = None
+    device_type: str | None = None
+    location: str | None = None
     description: str | None = None
     tags: list[str] = Field(default_factory=list)
     enabled: bool = True
@@ -118,6 +124,9 @@ class DeviceUpdate(BaseModel):
     name: str | None = None
     host: str | None = None
     vendor: str | None = None
+    model: str | None = None
+    device_type: str | None = None
+    location: str | None = None
     description: str | None = None
     tags: list[str] | None = None
     enabled: bool | None = None
@@ -168,6 +177,9 @@ class DeviceSummary(BaseModel):
     name: str
     host: str
     vendor: str | None = None
+    model: str | None = None
+    device_type: str | None = None
+    location: str | None = None
     status: DeviceStatus
     alert_group_id: int | None = None
     alert_group_name: str | None = None
