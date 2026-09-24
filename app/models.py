@@ -61,6 +61,13 @@ class SnmpVersion(str, enum.Enum):
     v3 = "3"
 
 
+class UserRole(str, enum.Enum):
+    super_admin = "super_admin"
+    admin = "admin"
+    operator = "operator"
+    viewer = "viewer"
+
+
 # ---------------------------------------------------------------- alert group
 class AlertGroup(Base):
     """A notification destination (e.g. one per client).
@@ -95,6 +102,11 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    role: Mapped[UserRole] = mapped_column(
+        SAEnum(UserRole, native_enum=False, length=16),
+        default=UserRole.viewer,
+        index=True,
+    )
     # When True the user must change their password before using the app
     # (set for the auto-created first admin so a generated password is one-time).
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -112,6 +124,9 @@ class Device(Base):
     name: Mapped[str] = mapped_column(String(128), index=True)
     host: Mapped[str] = mapped_column(String(255), index=True)
     vendor: Mapped[str | None] = mapped_column(String(64), nullable=True)  # mikrotik/cisco/unifi/olt/generic
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    device_type: Mapped[str | None] = mapped_column(String(64), nullable=True)  # router/switch/ap/server/olt/cctv/firewall
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
 
@@ -315,3 +330,22 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+# ---------------------------------------------------------------- audit log
+class AuditLog(Base):
+    """Append-only record of user activity (login, device CRUD, config change...)."""
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_created", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
