@@ -50,6 +50,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # to keep existing databases working without a migration tool.
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("devices", "alert_group_id", "INTEGER"),
+    ("users", "role", "VARCHAR(16)"),
+    ("devices", "model", "VARCHAR(128)"),
+    ("devices", "device_type", "VARCHAR(64)"),
+    ("devices", "location", "VARCHAR(255)"),
 ]
 
 
@@ -64,6 +68,24 @@ def _migrate_columns(conn) -> None:
             continue
         if column not in existing:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+    # Backfill role for existing users: superusers become super_admin, the
+    # rest default to viewer (least privilege). New users get a role explicitly.
+    try:
+        conn.execute(
+            text(
+                "UPDATE users SET role = 'super_admin' "
+                "WHERE (role IS NULL OR role = '') AND is_superuser = 1"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE users SET role = 'viewer' "
+                "WHERE (role IS NULL OR role = '') AND is_superuser = 0"
+            )
+        )
+    except Exception:  # pragma: no cover - column just created / table new
+        pass
 
 
 async def init_db() -> None:
