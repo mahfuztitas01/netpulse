@@ -78,3 +78,43 @@ async def get_current_superuser(
             detail="Superuser privileges required",
         )
     return user
+
+
+def require_role(*allowed: str):
+    """Dependency factory: restrict an endpoint to the given roles.
+
+    Roles are compared against ``user.role`` (falling back to superuser status
+    for legacy rows). Superadmin is always allowed.
+    """
+
+    async def _dep(user: User = Depends(get_current_user_ready)) -> User:
+        from .rbac import role_order
+
+        rank = role_order(user.role)
+        needed = max(role_order(r) for r in allowed)
+        if rank < needed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return user
+
+    return _dep
+
+
+def require_device_write(user: User = Depends(get_current_user_ready)) -> User:
+    """Gate device create/update/delete (admin+)."""
+    from .rbac import can
+
+    if not can(user.role, "devices", "write"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return user
+
+
+def require_user_manage(user: User = Depends(get_current_user_ready)) -> User:
+    """Gate user management (super_admin only)."""
+    from .rbac import can
+
+    if not can(user.role, "users", "write"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return user
