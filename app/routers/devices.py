@@ -3,14 +3,15 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from ..audit import record
 from ..crypto import encrypt
 from ..database import get_db
-from ..deps import get_current_user_ready
+from ..deps import get_current_user_ready, require_device_write
 from ..models import Check, CheckResult, Device, Event, User, utcnow
 from ..monitor.engine import engine
 from ..schemas import (
@@ -26,6 +27,13 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+
+def _client_ip(request) -> str | None:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 _SECRET_FIELDS = ("snmp_community", "snmp_v3_auth_pass", "snmp_v3_priv_pass")
 _SECRET_TARGETS = {
@@ -125,7 +133,8 @@ async def list_devices(
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 async def create_device(
     payload: DeviceCreate,
-    _: User = Depends(get_current_user_ready),
+    request: Request,
+    user: User = Depends(require_device_write),
     db: AsyncSession = Depends(get_db),
 ):
     data = payload.model_dump(exclude={"checks"})
@@ -137,6 +146,11 @@ async def create_device(
     db.add(device)
     await db.commit()
     await db.refresh(device)
+    await record(db, action="device_created", username=user.username, user_id=user.id,
+                 entity_type="device", entity_id=device.id,
+                 detail=f"added device {device.name} ({device.host})",
+                 ip_address=_client_ip(request))
+    await db.commit()
     return device
 
 
@@ -151,7 +165,8 @@ async def get_device(
 async def update_device(
     device_id: int,
     payload: DeviceUpdate,
-    _: User = Depends(get_current_user_ready),
+    request: Request,
+    user: User = Depends(require_device_write),
     db: AsyncSession = Depends(get_db),
 ):
     device = await _get_device_or_404(db, device_id)
@@ -162,15 +177,28 @@ async def update_device(
     _apply_snmp_secrets(device, secrets)
     await db.commit()
     await db.refresh(device)
+    await record(db, action="device_updated", username=user.username, user_id=user.id,
+                 entity_type="device", entity_id=device.id,
+                 detail=f"edited device {device.name}",
+                 ip_address=_client_ip(request))
+    await db.commit()
     return device
 
 
 @router.delete("/{device_id}", response_model=MessageOut)
 async def delete_device(
-    device_id: int, _: User = Depends(get_current_user_ready), db: AsyncSession = Depends(get_db)
+    device_id: int,
+    request: Request,
+    user: User = Depends(require_device_write),
+    db: AsyncSession = Depends(get_db),
 ):
     device = await _get_device_or_404(db, device_id)
     await db.delete(device)
+    await db.commit()
+    await record(db, action="device_deleted", username=user.username, user_id=user.id,
+                 entity_type="device", entity_id=device_id,
+                 detail=f"deleted device {device.name} ({device.host})",
+                 ip_address=_client_ip(request))
     await db.commit()
     return MessageOut(detail="Device deleted")
 
