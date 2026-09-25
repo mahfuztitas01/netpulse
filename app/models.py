@@ -68,6 +68,43 @@ class UserRole(str, enum.Enum):
     viewer = "viewer"
 
 
+class AlertSeverity(str, enum.Enum):
+    """Five-level severity (Information -> Critical)."""
+    info = "info"
+    warning = "warning"
+    average = "average"
+    high = "high"
+    critical = "critical"
+
+
+class AlertStatus(str, enum.Enum):
+    """Alert lifecycle. problem -> acknowledged -> resolved."""
+    problem = "problem"
+    acknowledged = "acknowledged"
+    resolved = "resolved"
+
+
+class TriggerMetric(str, enum.Enum):
+    """The kind of measurement a threshold trigger watches."""
+    device_down = "device_down"
+    cpu = "cpu"
+    ram = "ram"
+    latency_ms = "latency_ms"
+    packet_loss = "packet_loss"
+    interface_down = "interface_down"
+    interface_utilization = "interface_utilization"
+    snmp_unavailable = "snmp_unavailable"
+
+
+class TriggerOperator(str, enum.Enum):
+    gt = ">"
+    gte = ">="
+    lt = "<"
+    lte = "<="
+    eq = "=="
+    neq = "!="
+
+
 # ---------------------------------------------------------------- alert group
 class AlertGroup(Base):
     """A notification destination (e.g. one per client).
@@ -349,3 +386,78 @@ class AuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ---------------------------------------------------------------- trigger (threshold rule)
+class Trigger(Base):
+    """A custom threshold rule that generates an :class:`Alert` when crossed.
+
+    A trigger watches a metric (CPU %, RAM %, latency, packet loss, interface
+    state...) for a specific device (or any device when ``device_id`` is NULL)
+    and opens an alert of the configured severity when the condition is true.
+    """
+
+    __tablename__ = "triggers"
+    __table_args__ = (Index("ix_trigger_device_metric", "device_id", "metric"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    device_id: Mapped[int | None] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    metric: Mapped[TriggerMetric] = mapped_column(
+        SAEnum(TriggerMetric, native_enum=False, length=32), index=True
+    )
+    operator: Mapped[TriggerOperator] = mapped_column(
+        SAEnum(TriggerOperator, native_enum=False, length=4), default=TriggerOperator.gt
+    )
+    threshold: Mapped[float] = mapped_column(Float)
+    severity: Mapped[AlertSeverity] = mapped_column(
+        SAEnum(AlertSeverity, native_enum=False, length=16), default=AlertSeverity.warning
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    device: Mapped["Device | None"] = relationship()
+
+
+# ---------------------------------------------------------------- alert (lifecycle)
+class Alert(Base):
+    """A problem instance with an ACK/RESOLVE lifecycle (Zabbix-style).
+
+    Each active problem is one row; acknowledging and resolving update the row
+    in place so the dashboard can show open problems vs. resolved history.
+    """
+
+    __tablename__ = "alerts"
+    __table_args__ = (
+        Index("ix_alert_status", "status"),
+        Index("ix_alert_device_status", "device_id", "status"),
+        Index("ix_alert_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int | None] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    trigger_id: Mapped[int | None] = mapped_column(
+        ForeignKey("triggers.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    severity: Mapped[AlertSeverity] = mapped_column(
+        SAEnum(AlertSeverity, native_enum=False, length=16), default=AlertSeverity.warning, index=True
+    )
+    status: Mapped[AlertStatus] = mapped_column(
+        SAEnum(AlertStatus, native_enum=False, length=16), default=AlertStatus.problem, index=True
+    )
+    message: Mapped[str] = mapped_column(Text)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    device: Mapped["Device | None"] = relationship()
