@@ -12,7 +12,9 @@ from sqlalchemy.orm import selectinload
 from ..config import settings
 from ..database import SessionLocal
 from ..models import (
+    Alert,
     AlertGroup,
+    AlertSeverity,
     Check,
     CheckResult,
     Device,
@@ -24,6 +26,7 @@ from ..models import (
     MetricSample,
     utcnow,
 )
+from .alerts import alert_manager
 from .checks import run_check
 from .metrics import collect_device_metrics
 from .notifier import load_telegram_config, notifier
@@ -213,6 +216,8 @@ class MonitorEngine:
         if metrics.errors:
             log.debug("metrics %s: %s", device.host, "; ".join(metrics.errors))
         await self._handle_metric_alerts(db, device, now)
+        # evaluate custom threshold triggers (CPU/RAM/latency) after metrics
+        await alert_manager.evaluate_device_triggers(db, device, now=now)
 
     # -------------------------------------------------------------- alerts
     async def _handle_status_alerts(
@@ -229,6 +234,12 @@ class MonitorEngine:
             event = Event(device_id=device.id, type=EventType.down, severity=EventSeverity.critical,
                           message=f"Device DOWN - {errors}", notified=False)
             db.add(event)
+            # alert lifecycle: open a critical problem
+            await alert_manager.open_alert(
+                db, device_id=device.id, name=f"Device DOWN - {device.name}",
+                severity=AlertSeverity.critical,
+                message=f"{device.name} ({device.host}) is DOWN: {errors}",
+            )
             if device.notify and not first_state:
                 ok = await notifier.device_down(device.name, device.host, errors,
                                                 chat_id=chat_id, whatsapp=wa)
@@ -242,6 +253,9 @@ class MonitorEngine:
             event = Event(device_id=device.id, type=EventType.up, severity=EventSeverity.info,
                           message=f"Device UP (downtime {downtime})", notified=False)
             db.add(event)
+            # resolve the open down alert
+            await alert_manager.resolve(db, device_id=device.id,
+                                        name=f"Device DOWN - {device.name}", by="system")
             if device.notify:
                 ok = await notifier.device_up(device.name, device.host, downtime,
                                               chat_id=chat_id, whatsapp=wa)
